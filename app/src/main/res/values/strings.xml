@@ -1169,4 +1169,21 @@ Optional — skip it and you appear as anon.</string>
 		<item quantity="one">%d new reply</item>
 		<item quantity="other">%d new replies</item>
 	</plurals>
+    <string name="source_repos">Source repositories</string>
+    <string name="source_repos_summary">Add sources by URL and keep them updated</string>
+    <string name="source_repos_list">Repositories</string>
+    <string name="source_plugins">Available sources</string>
+    <string name="add_repository">Add repository</string>
+    <string name="repository_url_hint">https://example.com/index.json</string>
+    <string name="repository_invalid_url">Enter a valid https:// address</string>
+    <string name="remove_repository_confirm">Remove this repository?</string>
+    <string name="no_repositories">No repositories yet. Add one to see its sources.</string>
+    <string name="plugin_installed">Installed</string>
+    <string name="plugin_update_available">Update available</string>
+    <string name="plugin_download_started">Downloading…</string>
+    <string name="plugin_verify_failed">Download did not match the repository checksum and was not installed.</string>
+    <string name="plugin_up_to_date">Already up to date</string>
+    <string name="media_type_manga">Manga</string>
+    <string name="media_type_book">Books</string>
+    <string name="media_type_video">Video</string>
 </resources>

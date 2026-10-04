@@ -37,6 +37,14 @@
         android:persistent="false"
         android:title="@string/sources_catalog" />
 
+    <PreferenceScreen
+        android:fragment="org.koitharu.kotatsu.sourcerepo.ui.SourceReposFragment"
+        android:icon="@drawable/ic_download"
+        android:key="source_repos"
+        android:persistent="false"
+        android:summary="@string/source_repos_summary"
+        android:title="@string/source_repos" />
+
     <SwitchPreferenceCompat
         android:defaultValue="false"
         android:icon="@drawable/ic_sfw"

@@ -67,3 +67,15 @@ class SourceRepoIndexParserTest {
 		assertNull(a1.single().sha256)
 	}
 }
+
+class RepoUrlTest {
+
+	@Test
+	fun acceptsOnlyAbsoluteHttps() {
+		assertEquals("https://h/repo/index.json", org.koitharu.kotatsu.sourcerepo.domain.normalizeRepoUrl("  https://h/repo/index.json "))
+		assertEquals("https://h/b", org.koitharu.kotatsu.sourcerepo.domain.normalizeRepoUrl("https://h/a/../b"))
+		for (bad in listOf("http://h/i.json", "ftp://h/i", "h/i.json", "https://", "https://user:pw@h/i", "", "https://h/ bad")) {
+			assertNull(bad, org.koitharu.kotatsu.sourcerepo.domain.normalizeRepoUrl(bad))
+		}
+	}
+}

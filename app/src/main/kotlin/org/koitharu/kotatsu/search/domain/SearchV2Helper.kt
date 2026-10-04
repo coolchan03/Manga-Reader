@@ -78,7 +78,8 @@ class SearchV2Helper @AssistedInject constructor(
 			}.onFailure { e ->
 				e.printStackTraceDebug()
 			}.getOrDefault(emptySet())
-			val tag = tags.find { x -> x.title.equals(query, ignoreCase = true) }
+			val wanted = query.normalizedTag()
+			val tag = tags.find { x -> x.title.normalizedTag() == wanted }
 			if (tag != null) {
 				MangaListFilter(tags = setOf(tag))
 			} else {
@@ -117,7 +118,7 @@ class SearchV2Helper @AssistedInject constructor(
 			}
 
 			SearchKind.TAG -> sortByDescending { m ->
-				m.tags.any { tag -> tag.title.equals(query, ignoreCase = true) }
+				m.tags.any { tag -> tag.title.normalizedTag() == query.normalizedTag() }
 			}
 		}
 	}
@@ -137,6 +138,9 @@ class SearchV2Helper @AssistedInject constructor(
 		}
 	}
 
+
+	/** Lowercases and drops spaces/punctuation so "Slice of Life" matches "slice-of-life". */
+	private fun String.normalizedTag(): String = lowercase().filter { it.isLetterOrDigit() }
 
 	private fun Manga.matches(query: String, threshold: Float): Boolean {
 		return matchesTitles(title, query, threshold) || matchesTitles(altTitle, query, threshold)

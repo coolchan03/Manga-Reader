@@ -25,11 +25,13 @@ import dagger.hilt.android.EntryPointAccessors
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.alternatives.ui.AlternativesActivity
+import org.koitharu.kotatsu.alternatives.ui.SourceReplacementActivity
 import org.koitharu.kotatsu.backups.ui.backup.BackupDialogFragment
 import org.koitharu.kotatsu.backups.ui.restore.RestoreDialogFragment
 import org.koitharu.kotatsu.bookmarks.ui.AllBookmarksActivity
 import org.koitharu.kotatsu.browser.BrowserActivity
 import org.koitharu.kotatsu.browser.cloudflare.CloudFlareActivity
+import org.koitharu.kotatsu.browser.cloudflare.CloudFlareHiddenActivity
 import org.koitharu.kotatsu.core.exceptions.CloudFlareProtectedException
 import org.koitharu.kotatsu.core.image.CoilMemoryCacheKey
 import org.koitharu.kotatsu.core.model.FavouriteCategory
@@ -170,13 +172,27 @@ class AppRouter private constructor(
         if (settings.isReaderMultiTaskEnabled && activityIntent.data != null) {
             activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT)
         }
-        startActivity(activityIntent, anchor?.let { view -> scaleUpActivityOptionsOf(view) })
+        val options = anchor?.let { view -> scaleUpActivityOptionsOf(view) }
+        startActivity(activityIntent, options)
     }
 
     fun openAlternatives(manga: Manga) {
+		startActivity(
+			Intent(contextOrNull() ?: return, AlternativesActivity::class.java)
+				.putExtra(KEY_MANGA, ParcelableManga(manga, withDescription = false)),
+		)
+	}
+
+	fun openSourceReplacement(manga: Collection<Manga>) {
+		if (manga.isEmpty()) {
+			return
+		}
         startActivity(
-            Intent(contextOrNull() ?: return, AlternativesActivity::class.java)
-                .putExtra(KEY_MANGA, ParcelableManga(manga)),
+			Intent(contextOrNull() ?: return, SourceReplacementActivity::class.java)
+				.putParcelableArrayListExtra(
+					KEY_MANGA_LIST,
+					manga.mapTo(ArrayList(manga.size)) { ParcelableManga(it, withDescription = false) },
+				),
         )
     }
 
@@ -714,14 +730,20 @@ class AppRouter private constructor(
                     }
                 }
 
-        fun cloudFlareResolveIntent(context: Context, exception: CloudFlareProtectedException): Intent =
-            Intent(context, CloudFlareActivity::class.java).apply {
+        fun cloudFlareResolveIntent(
+            context: Context,
+            exception: CloudFlareProtectedException,
+            hidden: Boolean = false,
+        ): Intent {
+            val activityClass = if (hidden) CloudFlareHiddenActivity::class.java else CloudFlareActivity::class.java
+            return Intent(context, activityClass).apply {
                 data = exception.url.toUri()
                 putExtra(KEY_SOURCE, exception.source.name)
                 exception.headers[CommonHeaders.USER_AGENT]?.let {
                     putExtra(KEY_USER_AGENT, it)
                 }
             }
+        }
 
         fun browserIntent(
             context: Context,

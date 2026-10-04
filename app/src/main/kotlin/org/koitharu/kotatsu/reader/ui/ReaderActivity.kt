@@ -11,6 +11,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
+import androidx.annotation.MainThread
 import androidx.activity.viewModels
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.graphics.Insets
@@ -40,6 +41,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.sourcescore.ui.CommunityRatingDelegate
+import org.koitharu.kotatsu.sourcescore.ui.CommunityCommentsSheet
 import org.koitharu.kotatsu.core.exceptions.resolve.DialogErrorObserver
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.nav.AppRouter
@@ -86,6 +89,9 @@ class ReaderActivity :
     ScrollTimerControlView.OnVisibilityChangeListener {
 
     @Inject
+    lateinit var communityRating: CommunityRatingDelegate
+
+    @Inject
     lateinit var settings: AppSettings
 
     @Inject
@@ -114,6 +120,9 @@ class ReaderActivity :
     private var gestureInsets: Insets = Insets.NONE
     private lateinit var readerManager: ReaderManager
     private val hideUiRunnable = Runnable { setUiIsVisible(false) }
+    private val hideEInkFlashRunnable = Runnable { einkFlashView.isVisible = false }
+    private lateinit var einkFlashView: View
+    private var eInkFlashCounter = 0
 
     // Tracks whether the foldable device is in an unfolded state (half-opened or flat)
     private var isFoldUnfolded: Boolean = false
@@ -122,6 +131,7 @@ class ReaderActivity :
         super.onCreate(savedInstanceState)
         setContentView(ActivityReaderBinding.inflate(layoutInflater))
         readerManager = ReaderManager(supportFragmentManager, viewBinding.container, settings)
+        einkFlashView = createEInkFlashView()
         setDisplayHomeAsUp(isEnabled = true, showUpAsClose = false)
         touchHelper = TapGridDispatcher(viewBinding.root, this)
         scrollTimer = scrollTimerFactory.create(resources, this, this)
@@ -145,30 +155,30 @@ class ReaderActivity :
             }
         }
 
-        viewModel.onLoadingError.observeEvent(
-            this,
-            DialogErrorObserver(
-                host = viewBinding.container,
-                fragment = null,
-                resolver = exceptionResolver,
-                onResolved = { isResolved ->
-                    if (isResolved) {
-                        viewModel.reload()
-                    } else if (viewModel.content.value.pages.isEmpty()) {
-                        dispatchNavigateUp()
-                    }
-                },
-            ),
+        val loadingErrorDialog = DialogErrorObserver(
+            host = viewBinding.container,
+            fragment = null,
+            resolver = exceptionResolver,
+            onResolved = { isResolved ->
+                if (isResolved) {
+                    viewModel.reload()
+                } else if (viewModel.content.value.pages.isEmpty()) {
+                    dispatchNavigateUp()
+                }
+            },
         )
-        viewModel.onError.observeEvent(
-            this,
-            SnackbarErrorObserver(
-                host = viewBinding.container,
-                fragment = null,
-                resolver = exceptionResolver,
-                onResolved = null,
-            ),
+        viewModel.onLoadingError.observeEvent(this) { error ->
+            loadingErrorDialog.emit(error)
+        }
+        val errorSnackbar = SnackbarErrorObserver(
+            host = viewBinding.container,
+            fragment = null,
+            resolver = exceptionResolver,
+            onResolved = null,
         )
+        viewModel.onError.observeEvent(this) { error ->
+            errorSnackbar.emit(error)
+        }
         viewModel.readerMode.observe(this, Lifecycle.State.STARTED, this::onInitReader)
         viewModel.onPageSaved.observeEvent(this, PagesSavedObserver(viewBinding.container))
         viewModel.uiState.zipWithPrevious().observe(this, this::onUiStateChanged)
@@ -458,6 +468,36 @@ class ReaderActivity :
         viewModel.toggleBookmark()
     }
 
+    /**
+     * The one place the reader touches the community feature, mirroring the details screen: this file
+     * is upstream Kotatsu's and the fork has to keep rebasing onto it.
+     *
+     * Scoped to the chapter rather than the work - the comments worth reading while you are three
+     * pages into chapter 40 are the ones about chapter 40.
+     */
+    override fun onCommentsClick() {
+        if (!communityRating.isAvailable) {
+            Snackbar.make(viewBinding.root, R.string.community_comments_unavailable, Snackbar.LENGTH_SHORT).show()
+            return
+        }
+        val manga = viewModel.getMangaOrNull() ?: return
+        // The chapter *number*, resolved through the same key the details screen would use. The
+        // reading state carries Kotatsu's local chapter id, which is a hash of the source's url and
+        // so is unique to this source and this install - scoping a thread to it would have given
+        // every reader a private thread and called it a community.
+        val localId = viewModel.getCurrentState()?.chapterId
+        val number = manga.chapters?.firstOrNull { it.id == localId }?.number
+        val chapterId = number?.let { communityRating.chapterKey(it) }
+        lifecycleScope.launch {
+            val workId = communityRating.workId(manga)
+            if (workId == null) {
+                Snackbar.make(viewBinding.root, R.string.community_comments_unavailable, Snackbar.LENGTH_SHORT).show()
+            } else {
+                CommunityCommentsSheet.show(supportFragmentManager, workId, chapterId)
+            }
+        }
+    }
+
     override fun onSavePageClick() {
         viewModel.saveCurrentPage(pageSaveHelper)
     }
@@ -518,6 +558,7 @@ class ReaderActivity :
         ) {
             viewBinding.toastView.showTemporary(chapterTitle, TOAST_DURATION)
         }
+        flashOnPageChanged(previous, uiState)
         if (uiState.isSliderAvailable()) {
             viewBinding.actionsView.setSliderValue(
                 value = uiState.currentPage,
@@ -529,6 +570,49 @@ class ReaderActivity :
         viewBinding.actionsView.isSliderEnabled = uiState.isSliderAvailable()
         viewBinding.actionsView.isNextEnabled = uiState.hasNextChapter()
         viewBinding.actionsView.isPrevEnabled = uiState.hasPreviousChapter()
+    }
+
+    private fun createEInkFlashView(): View {
+        return View(this).apply {
+            isVisible = false
+            isClickable = false
+            isFocusable = false
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            viewBinding.root.addView(
+                this,
+                CoordinatorLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                ),
+            )
+        }
+    }
+
+    @MainThread
+    private fun flashOnPageChanged(previous: ReaderUiState?, uiState: ReaderUiState) {
+        if (previous == null) {
+            return
+        }
+        if (previous.chapter.id == uiState.chapter.id && previous.currentPage == uiState.currentPage) {
+            return
+        }
+        if (!settings.isEInkFlashEnabled) {
+            eInkFlashCounter = 0
+            return
+        }
+        eInkFlashCounter++
+        if (eInkFlashCounter % settings.eInkFlashEvery == 0) {
+            showEInkFlash()
+        }
+    }
+
+    private fun showEInkFlash() {
+        einkFlashView.removeCallbacks(hideEInkFlashRunnable)
+        einkFlashView.animate().cancel()
+        einkFlashView.setBackgroundColor(settings.eInkFlashColor.colorInt)
+        einkFlashView.bringToFront()
+        einkFlashView.isVisible = true
+        einkFlashView.postDelayed(hideEInkFlashRunnable, settings.eInkFlashDuration.toLong())
     }
 
     private fun updateScrollTimerButton() {

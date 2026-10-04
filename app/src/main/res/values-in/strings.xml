@@ -739,7 +739,7 @@
     <string name="source_code">Kode sumber</string>
     <string name="download_cellular_confirm">Izinkan mengunduh melalui jaringan seluler?</string>
     <string name="demographics">Demografis</string>
-    <string name="telegram_group">Grup telegram</string>
+    <string name="telegram_group">Grup discord</string>
     <string name="more_options">Opsi lainnya</string>
     <string name="popular_in_week">Populer minggu ini</string>
     <string name="popular_in_month">Populer bulan ini</string>
@@ -803,8 +803,6 @@
     <string name="global_search">Pencarian global</string>
     <string name="search_everywhere">Cari dimana saja</string>
     <string name="badges_in_lists">Lencana dalam daftar</string>
-    <string name="tags_warnings">tandai genre berbahaya</string>
-    <string name="tags_warnings_summary">Tandai genre yang mungkin tidak pantas untuk sebagian besar pengguna</string>
     <string name="error_non_file_uri">Jalur yang dipilih tidak dapat digunakan karena tidak menunjukkan berkas atau direktori</string>
     <string name="use_default_cover">gunakan penutup default</string>
     <string name="pick_manga_page">Pilih halaman manga</string>
@@ -813,7 +811,6 @@
     <string name="theme_name_expressive">Ekspresif (Test)</string>
     <string name="page_switch_timer">Halaman akan berganti setiap ~%d detik</string>
     <string name="expand">Memperluas</string>
-    <string name="adblock">Blokir iklan di browser</string>
     <string name="dont_ask_again">Jangan bertanya lagi</string>
     <string name="incognito_for_nsfw">Mode penyamaran untuk manga NSFW</string>
     <string name="incognito_mode_hint_nsfw">Manga ini mungkin mengandung konten dewasa. Apakah Anda ingin menggunakan mode penyamaran?</string>
@@ -826,7 +823,6 @@
     <string name="reader_multitask_summary">Memungkinkan anda untuk tetap membuka beberapa \"pembaca\" dengan manga yang berbeda pada saat yang sama</string>
     <string name="manga_override_hint">Perubahan ini akan memengaruhi cara manga ditampilkan di aplikasi</string>
     <string name="additional_action_required">Tindakan tambahan diperlukan</string>
-    <string name="adblock_summary">Blokir iklan di browser bawaan (beta)</string>
     <string name="theme_name_totoro">Totoro</string>
     <string name="theme_name_itsuka">Itsuka</string>
     <string name="reader_multitask">Buka pembaca secara terpisah</string>

@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
+import android.util.Log
 import android.provider.Settings
 import androidx.annotation.CheckResult
 import androidx.core.app.NotificationChannelCompat
@@ -58,6 +59,9 @@ import org.koitharu.kotatsu.core.util.ext.trySetForeground
 import org.koitharu.kotatsu.download.ui.worker.DownloadTask
 import org.koitharu.kotatsu.download.ui.worker.DownloadWorker
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
+import org.koitharu.kotatsu.local.data.LocalStorageManager
+import org.koitharu.kotatsu.history.data.HistoryRepository
+import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.parsers.util.toIntUp
 import org.koitharu.kotatsu.settings.work.PeriodicWorkScheduler
@@ -66,6 +70,8 @@ import org.koitharu.kotatsu.tracker.domain.GetTracksUseCase
 import org.koitharu.kotatsu.tracker.domain.model.MangaTracking
 import org.koitharu.kotatsu.tracker.domain.model.MangaUpdates
 import org.koitharu.kotatsu.tracker.work.TrackerNotificationHelper.NotificationInfo
+import java.time.Instant
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Provider
@@ -84,6 +90,8 @@ class TrackWorker @AssistedInject constructor(
 	private val workManager: WorkManager,
 	private val localRepositoryLazy: Lazy<LocalMangaRepository>,
 	private val downloadSchedulerLazy: Lazy<DownloadWorker.Scheduler>,
+	private val historyRepositoryLazy: Lazy<HistoryRepository>,
+	private val storageManagerLazy: Lazy<LocalStorageManager>,
 ) : CoroutineWorker(context, workerParams) {
 
 	private val notificationManager by lazy { NotificationManagerCompat.from(applicationContext) }
@@ -91,11 +99,17 @@ class TrackWorker @AssistedInject constructor(
 	override suspend fun doWork(): Result {
 		notificationHelper.updateChannels()
 		val isForeground = trySetForeground()
+		// Full run when manually triggered (TAG_ONESHOT), regardless of whether the
+		// foreground service promotion succeeded — Android may refuse the promotion
+		// on certain OEMs, but the user explicitly asked for an immediate full check.
+		val isFullRun = TAG_ONESHOT in tags
+		Log.i(LOG_TAG, "doWork: tags=$tags isForeground=$isForeground isFullRun=$isFullRun")
 		return try {
-			doWorkImpl(isFullRun = isForeground && TAG_ONESHOT in tags)
+			doWorkImpl(isFullRun = isFullRun)
 		} catch (e: CancellationException) {
 			throw e
 		} catch (e: Throwable) {
+			Log.w(LOG_TAG, "doWork failed", e)
 			e.printStackTraceDebug()
 			Result.failure()
 		} finally {
@@ -107,14 +121,18 @@ class TrackWorker @AssistedInject constructor(
 
 	private suspend fun doWorkImpl(isFullRun: Boolean): Result {
 		if (!settings.isTrackerEnabled) {
+			Log.i(LOG_TAG, "doWorkImpl: tracker disabled, skipping")
 			return Result.success()
 		}
-		val tracks = getTracksUseCase(if (isFullRun) Int.MAX_VALUE else BATCH_SIZE)
+		val limit = if (isFullRun) Int.MAX_VALUE else BATCH_SIZE
+		val tracks = getTracksUseCase(limit)
+		Log.i(LOG_TAG, "doWorkImpl: isFullRun=$isFullRun limit=$limit -> fetched ${tracks.size} track(s) to check")
 		if (tracks.isEmpty()) {
 			return Result.success()
 		}
 
 		val notifications = checkUpdatesAsync(tracks)
+		Log.i(LOG_TAG, "doWorkImpl: checked ${tracks.size} track(s), ${notifications.size} produced notifications")
 		if (notifications.isNotEmpty() && applicationContext.checkNotificationPermission(null)) {
 			val groupNotification = notificationHelper.createGroupNotification(notifications)
 			notifications.forEach { notificationManager.notify(it.tag, it.id, it.notification) }
@@ -151,13 +169,26 @@ class TrackWorker @AssistedInject constructor(
 			}
 			when (it) {
 				is MangaUpdates.Failure -> {
+					Log.w(
+						LOG_TAG,
+						"[${it.manga.id}] \"${it.manga.title}\" check failed: " +
+							"${it.error?.javaClass?.simpleName} ${it.error?.message}",
+					)
 					val e = it.error
 					if (e is CloudFlareException) {
-						captchaHandler.handle(e)
+						// Don't block the update check on solving captchas; just notify the user
+						captchaHandler.handle(e, tryAutoResolve = false)
 					}
 				}
 
-				is MangaUpdates.Success -> processDownload(it)
+				is MangaUpdates.Success -> {
+					Log.i(
+						LOG_TAG,
+						"[${it.manga.id}] \"${it.manga.title}\" checked: isValid=${it.isValid} " +
+							"newChapters=${it.newChapters.size}",
+					)
+					processDownload(it)
+				}
 			}
 		}.mapNotNull {
 			when (it) {
@@ -249,25 +280,44 @@ class TrackWorker @AssistedInject constructor(
 		if (!mangaUpdates.isValid || mangaUpdates.newChapters.isEmpty()) {
 			return
 		}
-		when (settings.trackerDownloadStrategy) {
-			TrackerDownloadStrategy.DISABLED -> Unit
-			TrackerDownloadStrategy.DOWNLOADED -> {
-				val localManga = localRepositoryLazy.get().findSavedManga(mangaUpdates.manga)
-				if (localManga != null) {
-					val task = DownloadTask(
-						mangaId = mangaUpdates.manga.id,
-						isPaused = false,
-						isSilent = false,
-						chaptersIds = mangaUpdates.newChapters.ids().toLongArray(),
-						destination = null,
-						format = null,
-						allowMeteredNetwork = settings.allowDownloadOnMeteredNetwork != TriStateOption.DISABLED,
-					)
-					downloadSchedulerLazy.get().schedule(setOf(mangaUpdates.manga to task))
-				}
-			}
+		val shouldDownload = when (settings.trackerDownloadStrategy) {
+			TrackerDownloadStrategy.DISABLED -> false
+			TrackerDownloadStrategy.DOWNLOADED -> localRepositoryLazy.get()
+				.findSavedManga(mangaUpdates.manga) != null
+
+			TrackerDownloadStrategy.RECENTLY_READ -> isReadRecently(mangaUpdates.manga)
 		}
+		if (!shouldDownload || !hasFreeSpaceForDownload()) {
+			return
+		}
+		// Only the newest few: a dormant series that backfills its archive would otherwise queue
+		// hundreds of chapters at once.
+		val chapters = mangaUpdates.newChapters
+			.takeLast(TrackerDownloadStrategy.MAX_CHAPTERS_PER_RUN)
+		val task = DownloadTask(
+			mangaId = mangaUpdates.manga.id,
+			isPaused = false,
+			isSilent = false,
+			chaptersIds = chapters.ids().toLongArray(),
+			destination = null,
+			format = null,
+			allowMeteredNetwork = settings.allowDownloadOnMeteredNetwork != TriStateOption.DISABLED,
+		)
+		downloadSchedulerLazy.get().schedule(setOf(mangaUpdates.manga to task))
 	}
+
+	private suspend fun isReadRecently(manga: Manga): Boolean {
+		val lastRead = historyRepositoryLazy.get().getOne(manga)?.updatedAt ?: return false
+		val threshold = Instant.now().minus(TrackerDownloadStrategy.RECENT_READ_WINDOW_DAYS, ChronoUnit.DAYS)
+		return lastRead.isAfter(threshold)
+	}
+
+	/**
+	 * Auto-download is unattended, so it must not be the thing that fills the device.
+	 */
+	private suspend fun hasFreeSpaceForDownload(): Boolean = runCatchingCancellable {
+		storageManagerLazy.get().computeAvailableSize() >= TrackerDownloadStrategy.MIN_FREE_SPACE_BYTES
+	}.getOrDefault(true)
 
 	@Reusable
 	class Scheduler @Inject constructor(
@@ -334,6 +384,7 @@ class TrackWorker @AssistedInject constructor(
 
 	private companion object {
 
+		const val LOG_TAG = "TrackWorker"
 		const val WORKER_CHANNEL_ID = "track_worker"
 		const val WORKER_NOTIFICATION_ID = 35
 		const val TAG = "tracking"

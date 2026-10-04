@@ -21,11 +21,15 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.mapSortedByCount
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
+import org.koitharu.kotatsu.explore.data.SourcePresetsRepository
 import org.koitharu.kotatsu.explore.data.SourcesSortOrder
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.LoadingState
 import org.koitharu.kotatsu.parsers.model.ContentType
+import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.model.MangaSource
+import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
+import org.koitharu.kotatsu.sourcescore.domain.SourceRanker
 import java.util.EnumSet
 import java.util.Locale
 import javax.inject.Inject
@@ -34,7 +38,9 @@ import javax.inject.Inject
 class SourcesCatalogViewModel @Inject constructor(
 	private val repository: MangaSourcesRepository,
 	db: MangaDatabase,
-	settings: AppSettings,
+	private val settings: AppSettings,
+	private val presetsRepository: SourcePresetsRepository,
+	private val sourceRanker: SourceRanker,
 ) : BaseViewModel() {
 
 	val onActionDone = MutableEventFlow<ReversibleAction>()
@@ -56,18 +62,28 @@ class SourcesCatalogViewModel @Inject constructor(
 
 	val contentTypes = MutableStateFlow<List<ContentType>>(emptyList())
 
+	private val activePresetId = settings.activeSourcePresetId
+	private val presetSources = MutableStateFlow<Set<String>>(emptySet())
+
+	val isPresetMode: Boolean
+		get() = activePresetId != 0L
+
 	val content: StateFlow<List<ListModel>> = combine(
 		searchQuery,
 		appliedFilter,
+		presetSources,
 		db.invalidationTrackerFlow(TABLE_SOURCES),
-	) { q, f, _ ->
-		buildSourcesList(f, q)
-	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState))
+		// Re-rank when a score download lands, not only when the sources table changes.
+		sourceRanker.observeScores(),
+	) { q, f, ps, _, _ ->
+		buildSourcesList(f, q, ps)
+	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState()))
 
 	init {
 		repository.clearNewSourcesBadge()
 		launchJob(Dispatchers.Default) {
 			contentTypes.value = getContentTypes(settings.isNsfwContentDisabled)
+			loadActivePreset()
 		}
 	}
 
@@ -83,6 +99,21 @@ class SourcesCatalogViewModel @Inject constructor(
 		launchJob(Dispatchers.Default) {
 			val rollback = repository.setSourcesEnabled(setOf(source), true)
 			onActionDone.call(ReversibleAction(R.string.source_enabled, rollback))
+		}
+	}
+
+	fun togglePresetSource(source: MangaParserSource) {
+		if (activePresetId == 0L) return
+		launchJob(Dispatchers.Default) {
+			val current = presetSources.value.toMutableSet()
+			val name = source.name
+			if (name in current) {
+				current.remove(name)
+			} else {
+				current.add(name)
+			}
+			presetsRepository.updatePresetSources(activePresetId, current)
+			presetSources.value = current
 		}
 	}
 
@@ -102,11 +133,16 @@ class SourcesCatalogViewModel @Inject constructor(
 		appliedFilter.value = appliedFilter.value.copy(isNewOnly = value)
 	}
 
-	private suspend fun buildSourcesList(filter: SourcesCatalogFilter, query: String?): List<SourceCatalogItem> {
+	private suspend fun buildSourcesList(
+		filter: SourcesCatalogFilter,
+		query: String?,
+		presetSourceNames: Set<String>,
+	): List<SourceCatalogItem> {
+		val isPreset = activePresetId != 0L
 		val sources = repository.queryParserSources(
-			isDisabledOnly = true,
+			isDisabledOnly = !isPreset,
 			isNewOnly = filter.isNewOnly,
-			excludeBroken = false,
+			excludeBroken = isPreset,
 			types = filter.types,
 			query = query,
 			locale = filter.locale,
@@ -129,10 +165,31 @@ class SourcesCatalogViewModel @Inject constructor(
 				},
 			)
 		} else {
-			sources.map {
-				SourceCatalogItem.Source(source = it)
+			rankForCatalog(sources).map { (source, isHot) ->
+				SourceCatalogItem.Source(
+					source = source,
+					isInPreset = isPreset && source.name in presetSourceNames,
+					isHot = isHot,
+				)
 			}
 		}
+	}
+
+	/**
+	 * The catalogue is where people pick sources to add, so it leads with the ones worth adding:
+	 * working before broken, popular (flame-marked) next, then by score. The query is alphabetical,
+	 * and the sort is stable, so names still break every tie - and if the community database cannot
+	 * be read the list simply stays alphabetical.
+	 */
+	private suspend fun rankForCatalog(sources: List<MangaParserSource>): List<Pair<MangaParserSource, Boolean>> {
+		val snapshot = runCatchingCancellable { sourceRanker.snapshot() }.getOrNull()
+			?: return sources.map { it to false }
+		val ranks = sources.associate { it.name to snapshot.rank(it) }
+		return sources.sortedWith(
+			compareBy<MangaParserSource> { it.isBroken }
+				.thenByDescending { ranks.getValue(it.name).isHot }
+				.thenByDescending { ranks.getValue(it.name).composite },
+		).map { it to ranks.getValue(it.name).isHot }
 	}
 
 	@WorkerThread
@@ -142,6 +199,19 @@ class SourcesCatalogViewModel @Inject constructor(
 			result.filterNot { it == ContentType.HENTAI }
 		} else {
 			result
+		}
+	}
+
+	private suspend fun loadActivePreset() {
+		if (activePresetId != 0L) {
+			val preset = presetsRepository.getById(activePresetId)
+			if (preset != null) {
+				presetSources.value = preset.sources
+				val presetLocale = preset.languages.firstOrNull()
+				if (presetLocale != null && presetLocale in locales) {
+					appliedFilter.value = appliedFilter.value.copy(locale = presetLocale)
+				}
+			}
 		}
 	}
 }

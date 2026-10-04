@@ -60,12 +60,27 @@ class FavouritesRepository @Inject constructor(
 		return entities.toMangaList()
 	}
 
-	fun observeAll(order: ListSortOrder, filterOptions: Set<ListFilterOption>, limit: Int): Flow<List<Manga>> {
+	fun observeAll(
+		order: ListSortOrder,
+		filterOptions: Set<ListFilterOption>,
+		limit: Int,
+		searchQuery: String = "",
+	): Flow<List<Manga>> {
 		if (ListFilterOption.Downloaded in filterOptions) {
-			return localObserver.observeAll(order, filterOptions, limit)
+			return localObserver.observeAll(order, filterOptions, limit).filterByTitle(searchQuery)
 		}
-		return db.getFavouritesDao().observeAll(order, filterOptions, limit)
+		return db.getFavouritesDao().observeAll(order, filterOptions, limit, searchQuery)
 			.map { it.toMangaList() }
+	}
+
+	/**
+	 * The on-device observer reads the filesystem index rather than the favourites table, so it cannot
+	 * take a SQL predicate; narrow it in memory instead.
+	 */
+	private fun Flow<List<Manga>>.filterByTitle(query: String): Flow<List<Manga>> = if (query.isEmpty()) {
+		this
+	} else {
+		map { list -> list.filter { it.title.contains(query, ignoreCase = true) } }
 	}
 
 	suspend fun getManga(categoryId: Long): List<Manga> {
@@ -77,23 +92,39 @@ class FavouritesRepository @Inject constructor(
 		categoryId: Long,
 		order: ListSortOrder,
 		filterOptions: Set<ListFilterOption>,
-		limit: Int
+		limit: Int,
+		searchQuery: String = "",
 	): Flow<List<Manga>> {
 		if (ListFilterOption.Downloaded in filterOptions) {
-			return localObserver.observeAll(categoryId, order, filterOptions, limit)
+			return localObserver.observeAll(categoryId, order, filterOptions, limit).filterByTitle(searchQuery)
 		}
-		return db.getFavouritesDao().observeAll(categoryId, order, filterOptions, limit)
+		return db.getFavouritesDao().observeAll(categoryId, order, filterOptions, limit, searchQuery)
 			.map { it.toMangaList() }
 	}
 
-	fun observeAll(categoryId: Long, filterOptions: Set<ListFilterOption>, limit: Int): Flow<List<Manga>> {
+	fun observeAll(
+		categoryId: Long,
+		filterOptions: Set<ListFilterOption>,
+		limit: Int,
+		searchQuery: String = "",
+	): Flow<List<Manga>> {
 		return observeOrder(categoryId)
-			.flatMapLatest { order -> observeAll(categoryId, order, filterOptions, limit) }
+			.flatMapLatest { order -> observeAll(categoryId, order, filterOptions, limit, searchQuery) }
 	}
 
 	fun observeMangaCount(): Flow<Int> {
 		return db.getFavouritesDao().observeMangaCount()
 			.distinctUntilChanged()
+	}
+
+	suspend fun findPopularTagTitles(categoryId: Long, limit: Int): List<String> {
+		return db.getFavouritesDao().run {
+			if (categoryId == 0L) {
+				findPopularTagTitles(limit)
+			} else {
+				findPopularTagTitles(categoryId, limit)
+			}
+		}
 	}
 
 	fun observeCategories(): Flow<List<FavouriteCategory>> {
@@ -269,6 +300,28 @@ class FavouritesRepository @Inject constructor(
 			db.getChaptersDao().gc()
 		}
 		return ReversibleHandle { recoverToCategory(categoryId, ids) }
+	}
+
+	suspend fun setPinned(mangaIds: Collection<Long>, categoryId: Long, isPinned: Boolean) {
+		db.withTransaction {
+			val dao = db.getFavouritesDao()
+			for (id in mangaIds) {
+				if (categoryId == 0L) {
+					dao.setPinned(id, isPinned)
+				} else {
+					dao.setPinned(id, categoryId, isPinned)
+				}
+			}
+		}
+	}
+
+	suspend fun getPinnedIds(categoryId: Long): Set<Long> {
+		val dao = db.getFavouritesDao()
+		return if (categoryId == 0L) {
+			dao.findAllPinnedIds().toSet()
+		} else {
+			dao.findPinnedIds(categoryId).toSet()
+		}
 	}
 
 	private fun observeOrder(categoryId: Long): Flow<ListSortOrder> {

@@ -33,6 +33,8 @@ import org.koitharu.kotatsu.list.domain.ListSortOrder
 import org.koitharu.kotatsu.list.domain.MangaListMapper
 import org.koitharu.kotatsu.list.domain.QuickFilterListener
 import org.koitharu.kotatsu.list.ui.MangaListViewModel
+import org.koitharu.kotatsu.search.domain.ScreenSearchQuery
+import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionScope
 import org.koitharu.kotatsu.list.ui.model.EmptyState
 import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.LoadingState
@@ -53,6 +55,7 @@ class FavouritesListViewModel @Inject constructor(
 	private val mangaListMapper: MangaListMapper,
 	private val markAsReadUseCase: MarkAsReadUseCase,
 	quickFilterFactory: FavoritesListQuickFilter.Factory,
+	private val screenSearchQuery: ScreenSearchQuery,
 	settings: AppSettings,
 	mangaDataRepository: MangaDataRepository,
 	@LocalStorageChanges localStorageChanges: SharedFlow<LocalManga?>,
@@ -88,7 +91,7 @@ class FavouritesListViewModel @Inject constructor(
 		isPaginationReady.set(true)
 	}.catch {
 		emit(listOf(it.toErrorState(canRetry = false)))
-	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState))
+	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, listOf(LoadingState()))
 
 	override fun onRefresh() {
 		refreshTrigger.value = Any()
@@ -101,11 +104,21 @@ class FavouritesListViewModel @Inject constructor(
 
 	override fun toggleFilterOption(option: ListFilterOption) = quickFilter.toggleFilterOption(option)
 
-	override fun clearFilter() = quickFilter.clearFilter()
+	override fun clearFilter() {
+		screenSearchQuery.clear(SearchSuggestionScope.FAVOURITES)
+		quickFilter.clearFilter()
+	}
 
 	fun markAsRead(items: Set<Manga>) {
 		launchLoadingJob(Dispatchers.Default) {
 			markAsReadUseCase(items)
+			onRefresh()
+		}
+	}
+
+	fun setPinned(ids: Set<Long>, isPinned: Boolean) {
+		launchJob(Dispatchers.Default) {
+			repository.setPinned(ids, categoryId, isPinned)
 			onRefresh()
 		}
 	}
@@ -141,15 +154,19 @@ class FavouritesListViewModel @Inject constructor(
 
 	private suspend fun List<Manga>.mapList(mode: ListMode, filters: Set<ListFilterOption>): List<ListModel> {
 		if (isEmpty()) {
-			return if (filters.isEmpty()) {
+			// A text filter counts as a filter: the "no favourites yet" copy would otherwise suggest the
+			// list is empty rather than that nothing matched.
+			val hasFilters = filters.isNotEmpty() || screenSearchQuery.query(SearchSuggestionScope.FAVOURITES).value.isNotEmpty()
+			return if (!hasFilters) {
 				listOf(getEmptyState(hasFilters = false))
 			} else {
 				listOfNotNull(quickFilter.filterItem(filters), getEmptyState(hasFilters = true))
 			}
 		}
+		val pinnedIds = repository.getPinnedIds(categoryId)
 		val result = ArrayList<ListModel>(size + 1)
 		quickFilter.filterItem(filters)?.let(result::add)
-		mangaListMapper.toListModelList(result, this, mode, MangaListMapper.NO_FAVORITE)
+		mangaListMapper.toListModelList(result, this, mode, MangaListMapper.NO_FAVORITE, pinnedIds)
 		return result
 	}
 
@@ -158,13 +175,18 @@ class FavouritesListViewModel @Inject constructor(
 			sortOrder.filterNotNull(),
 			quickFilter.appliedOptions.combineWithSettings(),
 			limit,
-		) { order, filters, limit ->
+			screenSearchQuery.query(SearchSuggestionScope.FAVOURITES),
+		) { order, filters, limit, searchQuery ->
 			isPaginationReady.set(false)
-			repository.observeAll(order, filters, limit)
+			repository.observeAll(order, filters, limit, searchQuery)
 		}.flattenLatest()
 	} else {
-		combine(quickFilter.appliedOptions.combineWithSettings(), limit) { filters, limit ->
-			repository.observeAll(categoryId, filters, limit)
+		combine(
+			quickFilter.appliedOptions.combineWithSettings(),
+			limit,
+			screenSearchQuery.query(SearchSuggestionScope.FAVOURITES),
+		) { filters, limit, searchQuery ->
+			repository.observeAll(categoryId, filters, limit, searchQuery)
 		}.flattenLatest()
 	}
 

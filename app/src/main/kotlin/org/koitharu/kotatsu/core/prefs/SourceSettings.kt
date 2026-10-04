@@ -32,6 +32,23 @@ class SourceSettings(context: Context, source: MangaSource) : MangaSourceConfig 
 	val isCaptchaNotificationsDisabled: Boolean
 		get() = prefs.getBoolean(KEY_NO_CAPTCHA, false)
 
+	val isCaptchaAutoResolveDisabled: Boolean
+		get() = prefs.getBoolean(KEY_NO_AUTO_CAPTCHA, false)
+
+	/**
+	 * The User-Agent that actually earned this source's current `cf_clearance` cookie.
+	 *
+	 * Cloudflare only honours a clearance for the exact agent it was issued to, and the challenge can
+	 * only be solved by a WebView presenting an agent consistent with its own engine. Parsers that pin
+	 * an inconsistent agent — several return a hard-coded desktop string straight from
+	 * `getRequestHeaders()`, ignoring their own [ConfigKey.UserAgent] — would otherwise leave every
+	 * request blocked no matter how many times the challenge is solved. Set by the solver, applied by
+	 * `CommonHeadersInterceptor`; null means the parser's own agent is fine.
+	 */
+	var cloudFlareUserAgent: String?
+		get() = prefs.getString(KEY_CF_USER_AGENT, null)?.nullIfEmpty()
+		set(value) = prefs.edit { putString(KEY_CF_USER_AGENT, value?.sanitizeHeaderValue()) }
+
 	@Suppress("UNCHECKED_CAST")
 	override fun <T> get(key: ConfigKey<T>): T {
 		return when (key) {
@@ -47,6 +64,8 @@ class SourceSettings(context: Context, source: MangaSource) : MangaSourceConfig 
 			is ConfigKey.ShowSuspiciousContent -> prefs.getBoolean(key.key, key.defaultValue)
 			is ConfigKey.SplitByTranslations -> prefs.getBoolean(key.key, key.defaultValue)
 			is ConfigKey.PreferredImageServer -> prefs.getString(key.key, key.defaultValue)?.nullIfEmpty()
+			is ConfigKey.DisableUpdateChecking -> prefs.getBoolean(key.key, key.defaultValue)
+            is ConfigKey.InterceptCloudflare -> prefs.getBoolean(key.key, key.defaultValue)
 		} as T
 	}
 
@@ -57,6 +76,10 @@ class SourceSettings(context: Context, source: MangaSource) : MangaSourceConfig 
 			is ConfigKey.UserAgent -> putString(key.key, (value as String?)?.sanitizeHeaderValue())
 			is ConfigKey.SplitByTranslations -> putBoolean(key.key, value as Boolean)
 			is ConfigKey.PreferredImageServer -> putString(key.key, value as String? ?: "")
+            is ConfigKey.InterceptCloudflare -> putBoolean(key.key, value as Boolean)
+			is ConfigKey.DisableUpdateChecking -> {
+				// Read-only - parser-controlled only, users cannot change this
+			}
 		}
 	}
 
@@ -72,7 +95,9 @@ class SourceSettings(context: Context, source: MangaSource) : MangaSourceConfig 
 
 		const val KEY_DOMAIN = "domain"
 		const val KEY_NO_CAPTCHA = "no_captcha"
+		const val KEY_NO_AUTO_CAPTCHA = "no_auto_captcha"
 		const val KEY_SLOWDOWN = "slowdown"
 		const val KEY_SORT_ORDER = "sort_order"
+		const val KEY_CF_USER_AGENT = "cf_user_agent"
 	}
 }

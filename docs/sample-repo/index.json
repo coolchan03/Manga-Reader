@@ -1,0 +1,22 @@
+{
+  "name": "Example repo",
+  "plugins": [
+    {
+      "name": "Example Manga Source",
+      "pkg": "com.example.kotatsu.source.manga",
+      "version": 1,
+      "versionName": "1.0.0",
+      "apk": "https://example.com/apks/example-manga-1.apk",
+      "type": "manga",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "Example Novel Source",
+      "pkg": "com.example.kotatsu.source.novel",
+      "version": 3,
+      "versionName": "1.2.0",
+      "apk": "https://example.com/apks/example-novel-3.apk",
+      "type": "book"
+    }
+  ]
+}

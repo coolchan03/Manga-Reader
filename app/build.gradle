@@ -257,6 +257,7 @@ dependencies {
 	implementation libs.okhttp.dnsoverhttps
 	implementation libs.okio
 	implementation libs.kotlinx.serialization.json
+	implementation libs.quickjs.kt
 
 	implementation libs.adapterdelegates
 	implementation libs.adapterdelegates.viewbinding

@@ -26,6 +26,8 @@ import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.model.isNsfw
 import org.koitharu.kotatsu.core.parser.external.ExternalMangaSource
+import org.koitharu.kotatsu.jsext.repo.JsSourceStore
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
@@ -55,6 +57,8 @@ class MangaSourcesRepository @Inject constructor(
 	 * has no use for score ordering. Dagger ignores the default and injects the real instance.
 	 */
 	private val sourceRanker: SourceRanker? = null,
+	/** Nullable for the same reason as [sourceRanker]. */
+	private val jsStore: JsSourceStore? = null,
 ) {
 
 	private val isNewSourcesAssimilated = AtomicBoolean(false)
@@ -75,6 +79,7 @@ class MangaSourcesRepository @Inject constructor(
 				val external = getExternalSources()
 				val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
 				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+				getJsSources().mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
 				list.addAll(enabled)
 				list
 			}
@@ -196,6 +201,11 @@ class MangaSourcesRepository @Inject constructor(
 			external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
 			list.addAll(enabled)
 			list
+		}
+		.combine(jsStore?.changes ?: flowOf(0)) { sources, _ ->
+			val js = getJsSources().map { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+			// like external sources: installed means enabled, and they sit at the top
+			js + sources
 		}
 
 	fun observeAll(): Flow<List<Pair<MangaSource, Boolean>>> = dao.observeAll().map { entities ->
@@ -363,6 +373,14 @@ class MangaSourcesRepository @Inject constructor(
 			getExternalSources()
 		}.distinctUntilChanged()
 			.conflate()
+	}
+
+	/** Installed Mangayomi JS sources. Installing one is what enables it; NSFW ones honour the NSFW setting. */
+	fun getJsSources(): List<JsMangaSource> {
+		val skipNsfw = settings.isNsfwContentDisabled
+		return jsStore?.list().orEmpty()
+			.filter { !(skipNsfw && it.isNsfw) }
+			.map { JsMangaSource(it.id) }
 	}
 
 	fun getExternalSources(): List<ExternalMangaSource> = context.packageManager.queryIntentContentProviders(

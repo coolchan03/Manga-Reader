@@ -28,6 +28,10 @@
 					android:id="@+id/action_media_book"
 					android:title="@string/media_type_book" />
 
+				<item
+					android:id="@+id/action_media_video"
+					android:title="@string/media_type_video" />
+
 			</group>
 		</menu>
 

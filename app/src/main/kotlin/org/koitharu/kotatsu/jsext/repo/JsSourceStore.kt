@@ -1,5 +1,8 @@
 package org.koitharu.kotatsu.jsext.repo
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -17,18 +20,34 @@ class JsSourceStore(private val dir: File) {
 
 	data class Installed(val entry: JsSourceEntry, val code: String)
 
+	private val _changes = MutableStateFlow(0)
+
+	/** Ticks whenever a source is installed, updated or removed. */
+	val changes: StateFlow<Int> = _changes.asStateFlow()
+
+	init {
+		JsSourceRegistry.replaceAll(list())
+	}
+
+	private fun publish() {
+		JsSourceRegistry.replaceAll(list())
+		_changes.value++
+	}
+
 	/** Writes the metadata last, so a half-finished install is never listed. */
 	@Synchronized
 	fun install(entry: JsSourceEntry, code: String) {
 		dir.mkdirs()
 		File(dir, "${entry.id}.js").writeText(code)
 		File(dir, "${entry.id}.json").writeText(toJson(entry).toString())
+		publish()
 	}
 
 	@Synchronized
 	fun uninstall(id: Long) {
 		File(dir, "$id.json").delete()
 		File(dir, "$id.js").delete()
+		publish()
 	}
 
 	@Synchronized

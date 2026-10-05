@@ -11,6 +11,9 @@ import org.koitharu.kotatsu.core.model.TestMangaSource
 import org.koitharu.kotatsu.core.model.UnknownMangaSource
 import org.koitharu.kotatsu.core.parser.external.ExternalMangaRepository
 import org.koitharu.kotatsu.core.parser.external.ExternalMangaSource
+import org.koitharu.kotatsu.jsext.source.JsExtensionProvider
+import org.koitharu.kotatsu.jsext.source.JsMangaRepository
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.local.data.LocalMangaRepository
 import org.koitharu.kotatsu.parsers.MangaLoaderContext
 import org.koitharu.kotatsu.parsers.model.Manga
@@ -60,6 +63,7 @@ interface MangaRepository {
 		private val loaderContext: MangaLoaderContext,
 		private val contentCache: MemoryContentCache,
 		private val mirrorSwitcher: MirrorSwitcher,
+		private val jsExtensions: JsExtensionProvider,
 	) {
 
 		private val cache = ArrayMap<MangaSource, WeakReference<MangaRepository>>()
@@ -89,6 +93,12 @@ interface MangaRepository {
 				parser = loaderContext.newParserInstance(source),
 				cache = contentCache,
 				mirrorSwitcher = mirrorSwitcher,
+			)
+
+			is JsMangaSource -> JsMangaRepository(
+				source = source,
+				cache = contentCache,
+				extensions = jsExtensions,
 			)
 
 			TestMangaSource -> TestMangaRepository(

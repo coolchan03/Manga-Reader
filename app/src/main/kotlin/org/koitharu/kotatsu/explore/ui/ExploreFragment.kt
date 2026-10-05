@@ -39,6 +39,7 @@ import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.core.util.ext.systemBarsInsets
 import org.koitharu.kotatsu.databinding.FragmentExploreBinding
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreAdapter
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.explore.ui.preset.SourcePresetListActivity
 import org.koitharu.kotatsu.explore.ui.adapter.ExploreListEventListener
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
@@ -195,7 +196,8 @@ class ExploreFragment :
 	override fun onPrepareActionMode(controller: ListSelectionController, mode: ActionMode?, menu: Menu): Boolean {
 		val selectedSources = viewModel.sourcesSnapshot(controller.peekCheckedIds())
 		val isSingleSelection = selectedSources.size == 1
-		menu.findItem(R.id.action_settings).isVisible = isSingleSelection
+		menu.findItem(R.id.action_settings).isVisible = isSingleSelection &&
+			selectedSources.none { it.mangaSource is JsMangaSource }
 		menu.findItem(R.id.action_shortcut).isVisible = isSingleSelection
 		menu.findItem(R.id.action_pin).isVisible = selectedSources.all { !it.isPinned }
 		menu.findItem(R.id.action_unpin).isVisible = selectedSources.all { it.isPinned }

@@ -8,7 +8,9 @@ import org.junit.Assert.assertThrows
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import org.koitharu.kotatsu.jsext.repo.JsSourceRegistry
 import org.koitharu.kotatsu.jsext.repo.JsSourceStore
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.jsext.repo.MangayomiIndexParser
 import org.koitharu.kotatsu.jsext.repo.SourceCodeLanguage
 import org.koitharu.kotatsu.jsext.repo.compareVersions
@@ -64,6 +66,24 @@ class MangayomiIndexTest {
 		assertTrue(compareVersions("1.0", "1.0.0") == 0)
 		assertTrue(compareVersions("0.0.35", "0.1.0") < 0)
 		assertTrue(compareVersions("abc", "0") == 0)
+	}
+
+	@Test
+	fun registryAndChangeCounterFollowTheStore() {
+		val store = JsSourceStore(tmp.newFolder("js2"))
+		val entry = entries.single { it.name == "Annas Archive" }
+		val before = store.changes.value
+		assertNull(JsSourceRegistry.get(entry.id))
+		store.install(entry, "x")
+		assertEquals(entry.name, JsSourceRegistry.get(entry.id)?.name)
+		assertEquals(JsItemType.NOVEL, JsSourceRegistry.get(entry.id)?.itemType)
+		assertEquals(before + 1, store.changes.value)
+		store.uninstall(entry.id)
+		assertNull(JsSourceRegistry.get(entry.id))
+		assertEquals(before + 2, store.changes.value)
+		assertEquals(entry.id, JsMangaSource.fromName("js:${entry.id}")?.id)
+		assertNull(JsMangaSource.fromName("js:abc"))
+		assertNull(JsMangaSource.fromName("MANGADEX"))
 	}
 
 	@Test

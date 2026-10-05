@@ -27,8 +27,7 @@ class ExploreMenuProvider(
 				null -> R.id.action_media_all
 				MediaType.MANGA -> R.id.action_media_manga
 				MediaType.BOOK -> R.id.action_media_book
-				// no video sources exist yet, so the menu has no entry for it
-				MediaType.VIDEO -> R.id.action_media_all
+				MediaType.VIDEO -> R.id.action_media_video
 			},
 		)?.isChecked = true
 	}
@@ -48,6 +47,7 @@ class ExploreMenuProvider(
 			R.id.action_media_all -> setMediaType(menuItem, null)
 			R.id.action_media_manga -> setMediaType(menuItem, MediaType.MANGA)
 			R.id.action_media_book -> setMediaType(menuItem, MediaType.BOOK)
+			R.id.action_media_video -> setMediaType(menuItem, MediaType.VIDEO)
 
 			else -> false
 		}

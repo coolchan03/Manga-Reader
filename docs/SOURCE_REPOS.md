@@ -36,3 +36,11 @@ If several repos list the same `pkg`, the highest `version` wins.
   plugin, so a repo cannot silently replace a plugin with one signed by someone else.
 - Only add repositories you trust: a plugin runs inside the app's process once installed.
 - Plain `http://` repo and APK URLs are refused.
+
+## Mangayomi repositories
+
+Settings -> Source repositories also accepts **Mangayomi-format indexes** (`index.json`,
+`novel_index.json`, `anime_index.json`, ...), such as `https://raw.githubusercontent.com/kodjodevf/mangayomi-extensions/main/novel_index.json`.
+Their **JavaScript** sources can be installed and updated from the same screen; see
+[JS_EXTENSIONS.md](JS_EXTENSIONS.md). **Dart** sources cannot run here and are counted but not listed.
+Each index file is a separate URL: add `index.json`, `novel_index.json` and `anime_index.json` individually.

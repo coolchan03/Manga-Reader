@@ -8,6 +8,8 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
+import org.koitharu.kotatsu.jsext.repo.JsSourceEntry
+import org.koitharu.kotatsu.sourcerepo.domain.JsSourceItem
 import org.koitharu.kotatsu.sourcerepo.domain.PluginEntry
 import org.koitharu.kotatsu.sourcerepo.domain.RepoPlugin
 import org.koitharu.kotatsu.sourcerepo.domain.SourceRepoRepository
@@ -22,10 +24,12 @@ class SourceReposViewModel @Inject constructor(
 	data class State(
 		val repos: List<String>,
 		val plugins: List<PluginEntry>,
+		val jsSources: List<JsSourceItem>,
+		val skippedDartCount: Int,
 		val errors: Map<String, Throwable>,
 	)
 
-	val state = MutableStateFlow(State(repository.getRepos(), emptyList(), emptyMap()))
+	val state = MutableStateFlow(State(repository.getRepos(), emptyList(), emptyList(), 0, emptyMap()))
 
 	/** A verified APK is ready: the fragment launches the system installer. */
 	val onInstall = MutableEventFlow<Intent>()
@@ -42,7 +46,13 @@ class SourceReposViewModel @Inject constructor(
 	fun refresh() {
 		launchLoadingJob(Dispatchers.Default) {
 			val result = repository.fetchAll()
-			state.value = State(repository.getRepos(), result.plugins, result.errors)
+			state.value = State(
+				repos = repository.getRepos(),
+				plugins = result.plugins,
+				jsSources = result.jsSources,
+				skippedDartCount = result.skippedDartCount,
+				errors = result.errors,
+			)
 		}
 	}
 
@@ -57,6 +67,19 @@ class SourceReposViewModel @Inject constructor(
 
 	fun removeRepo(url: String) {
 		repository.removeRepo(url)
+		refresh()
+	}
+
+	fun installJs(entry: JsSourceEntry) {
+		launchLoadingJob(Dispatchers.Default) {
+			repository.installJsSource(entry)
+			onMessage.call(R.string.js_source_installed)
+			refresh()
+		}
+	}
+
+	fun uninstallJs(entry: JsSourceEntry) {
+		repository.uninstallJsSource(entry)
 		refresh()
 	}
 

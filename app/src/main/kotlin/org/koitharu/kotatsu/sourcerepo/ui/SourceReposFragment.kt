@@ -23,6 +23,8 @@ import org.koitharu.kotatsu.core.ui.BasePreferenceFragment
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.core.util.ext.observeEvent
+import org.koitharu.kotatsu.jsext.JsItemType
+import org.koitharu.kotatsu.sourcerepo.domain.JsSourceItem
 import org.koitharu.kotatsu.sourcerepo.domain.PluginEntry
 import org.koitharu.kotatsu.sourcerepo.domain.PluginState
 
@@ -105,6 +107,28 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 				},
 			)
 		}
+		if (state.skippedDartCount > 0) {
+			pluginsCategory.addPreference(
+				Preference(context).apply {
+					isPersistent = false
+					isSelectable = false
+					summary = getString(R.string.dart_sources_skipped, state.skippedDartCount)
+				},
+			)
+		}
+		for (item in state.jsSources) {
+			pluginsCategory.addPreference(
+				Preference(context).apply {
+					isPersistent = false
+					title = item.entry.name
+					summary = describeJs(item)
+					setOnPreferenceClickListener {
+						onJsSourceClick(item)
+						true
+					}
+				},
+			)
+		}
 		for (entry in state.plugins) {
 			pluginsCategory.addPreference(
 				Preference(context).apply {
@@ -134,6 +158,36 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 			PluginState.UPDATE_AVAILABLE -> getString(R.string.plugin_update_available)
 		}
 		return listOfNotNull("v${entry.plugin.versionName}", type, status).joinToString(" · ")
+	}
+
+	private fun describeJs(item: JsSourceItem): String {
+		val e = item.entry
+		val type = getString(
+			when (e.itemType) {
+				JsItemType.MANGA -> R.string.media_type_manga
+				JsItemType.NOVEL -> R.string.media_type_book
+				JsItemType.ANIME -> R.string.media_type_video
+			},
+		)
+		val status = when (item.state) {
+			PluginState.NOT_INSTALLED -> null
+			PluginState.INSTALLED -> getString(R.string.plugin_installed)
+			PluginState.UPDATE_AVAILABLE -> getString(R.string.plugin_update_available)
+		}
+		return listOfNotNull("v${e.version}", e.lang.takeIf { it.isNotEmpty() }, type, status).joinToString(" · ")
+	}
+
+	private fun onJsSourceClick(item: JsSourceItem) {
+		if (item.state == PluginState.INSTALLED) {
+			MaterialAlertDialogBuilder(requireContext())
+				.setTitle(item.entry.name)
+				.setMessage(R.string.js_source_remove_confirm)
+				.setNegativeButton(android.R.string.cancel, null)
+				.setPositiveButton(R.string.remove) { _, _ -> viewModel.uninstallJs(item.entry) }
+				.show()
+		} else {
+			viewModel.installJs(item.entry)
+		}
 	}
 
 	private fun onPluginClick(entry: PluginEntry) {

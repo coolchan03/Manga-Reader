@@ -1183,6 +1183,8 @@ Optional — skip it and you appear as anon.</string>
     <string name="plugin_download_started">Downloading…</string>
     <string name="plugin_verify_failed">Download did not match the repository checksum and was not installed.</string>
     <string name="plugin_up_to_date">Already up to date</string>
+    <string name="content_type">Content type</string>
+    <string name="media_type_all">All</string>
     <string name="media_type_manga">Manga</string>
     <string name="media_type_book">Books</string>
     <string name="media_type_video">Video</string>

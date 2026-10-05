@@ -1,6 +1,7 @@
 package org.koitharu.kotatsu.core.prefs
 
 import android.content.Context
+import org.koitharu.kotatsu.core.media.MediaType
 import android.content.SharedPreferences
 import android.content.pm.ActivityInfo
 import android.net.ConnectivityManager
@@ -385,6 +386,13 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 	var isAllSourcesEnabled: Boolean
 		get() = prefs.getBoolean(KEY_SOURCES_ENABLED_ALL, false)
 		set(value) = prefs.edit { putBoolean(KEY_SOURCES_ENABLED_ALL, value) }
+
+	/** Global content-type filter for Explore and search; `null` shows every type. */
+	var mediaTypeFilter: MediaType?
+		get() = prefs.getString(KEY_MEDIA_TYPE_FILTER, null)?.let { name ->
+			MediaType.entries.firstOrNull { it.name == name }
+		}
+		set(value) = prefs.edit { putString(KEY_MEDIA_TYPE_FILTER, value?.name) }
 
 	var activeSourcePresetId: Long
 		get() = getLongCompat(KEY_ACTIVE_SOURCE_PRESET, 0L)
@@ -943,6 +951,7 @@ class AppSettings @Inject constructor(@ApplicationContext context: Context) {
 		const val KEY_DISCORD_RPC_SKIP_NSFW = "discord_rpc_skip_nsfw"
 		const val KEY_DISCORD_TOKEN = "discord_token"
 		const val KEY_ACTIVE_SOURCE_PRESET = "active_source_preset"
+		const val KEY_MEDIA_TYPE_FILTER = "media_type_filter"
 
 		// keys for non-persistent preferences
 		const val KEY_APP_VERSION = "app_version"

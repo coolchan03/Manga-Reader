@@ -20,6 +20,7 @@ import kotlinx.coroutines.plus
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.media.filterByMediaType
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.model.UnknownMangaSource
 import org.koitharu.kotatsu.core.model.isNsfw
@@ -162,7 +163,9 @@ class SearchViewModel @Inject constructor(
 			val sources = if (pinnedOnly.value) {
 				emptyList()
 			} else {
-				sourcesRepository.getDisabledSources().toList().rankedForSweep(batch = 1)
+				sourcesRepository.getDisabledSources().toList()
+					.filterByMediaType(settings.mediaTypeFilter)
+					.rankedForSweep(batch = 1)
 			}
 			val semaphore = Semaphore(MAX_PARALLELISM)
 			sources.map { source ->
@@ -391,7 +394,10 @@ class SearchViewModel @Inject constructor(
 		val composite: Double,
 	)
 
-	private suspend fun getPresetSourcesOrDefault(): List<MangaSource> {
+	private suspend fun getPresetSourcesOrDefault(): List<MangaSource> =
+		getSourcesBeforeMediaFilter().filterByMediaType(settings.mediaTypeFilter)
+
+	private suspend fun getSourcesBeforeMediaFilter(): List<MangaSource> {
 		val presetId = settings.activeSourcePresetId
 		if (presetId != 0L) {
 			val preset = presetsRepository.getById(presetId)

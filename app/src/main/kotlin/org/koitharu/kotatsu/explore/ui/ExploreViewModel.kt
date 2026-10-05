@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.media.MediaType
+import org.koitharu.kotatsu.core.media.filterByMediaType
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.model.isNsfw
 import org.koitharu.kotatsu.core.os.AppShortcutManager
@@ -88,6 +90,13 @@ class ExploreViewModel @Inject constructor(
 
 	val presets: StateFlow<List<SourcePreset>> = presetsRepository.observeAll()
 		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
+
+	val mediaTypeFilter: MediaType?
+		get() = settings.mediaTypeFilter
+
+	fun setMediaTypeFilter(type: MediaType?) {
+		settings.mediaTypeFilter = type
+	}
 
 	val activePresetId: Long
 		get() = settings.activeSourcePresetId
@@ -173,7 +182,12 @@ class ExploreViewModel @Inject constructor(
 		}
 	}
 
-	private fun observeSourcesForDisplay(): Flow<List<MangaSourceInfo>> =
+	private fun observeSourcesForDisplay(): Flow<List<MangaSourceInfo>> = combine(
+		observeSourcesBeforeMediaFilter(),
+		settings.observeAsFlow(AppSettings.KEY_MEDIA_TYPE_FILTER) { mediaTypeFilter },
+	) { sources, mediaType -> sources.filterByMediaType(mediaType) }
+
+	private fun observeSourcesBeforeMediaFilter(): Flow<List<MangaSourceInfo>> =
 		activePresetFlow.flatMapLatest { preset: SourcePreset? ->
 			if (preset != null) {
 				// Same ordering rules as the enabled list, and re-sorted when scores download.

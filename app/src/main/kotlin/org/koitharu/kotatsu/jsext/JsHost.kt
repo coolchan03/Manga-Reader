@@ -10,6 +10,8 @@ class JsHttpRequest(
 	val body: ByteArray?,
 	/** The `Client(options)` object the extension created, e.g. redirect behaviour. */
 	val options: JsonObject?,
+	/** Keep binary responses out of the String body to avoid a second large in-memory copy. */
+	val binary: Boolean = false,
 )
 
 class JsHttpResponse(
@@ -20,6 +22,8 @@ class JsHttpResponse(
 	val body: String,
 	val finalUrl: String,
 	val isRedirect: Boolean = false,
+	/** Raw response bytes for binary helpers such as Mangayomi's EPUB parser. */
+	val bodyBytes: ByteArray? = null,
 )
 
 /** The network. The app backs this with its OkHttp client; tests use a fake. */

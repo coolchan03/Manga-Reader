@@ -47,7 +47,6 @@ internal class JsUtilsBridge(private val logger: JsLogger) {
 		val UNSUPPORTED = setOf(
 			"encryptAESCryptoJS", "decryptAESCryptoJS", "decryptAESGCM", "deobfuscateJsPassword",
 			"unpackJsAndCombine", "unpackJs", "parseDates", "evaluateJavascriptViaWebview",
-			"parseEpub", "parseEpubChapter",
 		)
 	}
 }

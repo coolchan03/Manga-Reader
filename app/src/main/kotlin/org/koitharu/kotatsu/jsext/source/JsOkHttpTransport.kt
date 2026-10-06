@@ -40,15 +40,19 @@ class JsOkHttpTransport(
 		}
 		builder.method(request.method, body)
 		return effectiveClient.newCall(builder.build()).await().use { response ->
+			val responseBody = response.body
+			val charset = responseBody.contentType()?.charset(Charsets.UTF_8) ?: Charsets.UTF_8
+			val raw = if (request.method == "HEAD") ByteArray(0) else responseBody.bytes()
 			JsHttpResponse(
 				statusCode = response.code,
 				reasonPhrase = response.message,
 				headers = response.headers.names().associate { name ->
 					name.lowercase() to response.headers.values(name).joinToString(", ")
 				},
-				body = if (request.method == "HEAD") "" else response.body.string(),
+				body = if (request.method == "HEAD" || request.binary) "" else raw.toString(charset),
 				finalUrl = response.request.url.toString(),
 				isRedirect = response.isRedirect,
+				bodyBytes = if (request.method == "HEAD") null else raw,
 			)
 		}
 	}

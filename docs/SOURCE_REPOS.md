@@ -43,4 +43,4 @@ Settings -> Source repositories also accepts **Mangayomi-format indexes** (`inde
 `novel_index.json`, `anime_index.json`, ...), such as `https://raw.githubusercontent.com/kodjodevf/mangayomi-extensions/main/novel_index.json`.
 Their **JavaScript** sources can be installed and updated from the same screen; see
 [JS_EXTENSIONS.md](JS_EXTENSIONS.md). **Dart** sources cannot run here and are counted but not listed.
-Each index file is a separate URL: add `index.json`, `novel_index.json` and `anime_index.json` individually.
+Each index file is a separate URL. Mangayomi's official repository currently publishes active manga and novel links while its anime link is commented out, so the app does not hard-code that inactive feed. Compatible third-party Mangayomi-format anime indexes can still be added normally.

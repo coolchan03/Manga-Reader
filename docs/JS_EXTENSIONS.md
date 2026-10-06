@@ -25,11 +25,17 @@ Implemented: `Client` (all verbs), `Document`/`Element` (select, selectFirst, at
 outerHtml, getSrc/getHref/getImg/getDataSrc, siblings, children, by tag/class/id), `SharedPreferences`
 with `getSourcePreferences()` defaults, `console.*`, `cryptoHandler`, and the full extension contract
 (`getPopular`, `getLatestUpdates`, `search`, `getDetail`, `getPageList`, `getVideoList`,
-`getHtmlContent`, `cleanHtmlContent`, `getFilterList`).
+`getHtmlContent`, `cleanHtmlContent`, `getFilterList`). JS network requests use Kotatsu's scraping
+client and carry their source identity, so Cloudflare challenges can use Kotatsu's normal automatic
+verification flow.
 
-Not implemented yet (fail with a clear "not supported yet" error, never silently): video-host
-extractors, `evaluateJavascriptViaWebview`, `parseEpub*`, `unpackJs*`, `decryptAES*`, `parseDates`,
-XPath attribute results. Dart extensions cannot run at all, only JavaScript ones.
+Novel HTML is consumed by the dedicated text reader. Anime/video lists are consumed by the Media3
+player when a JavaScript anime source returns direct playable streams; headers and subtitles from the
+extension are forwarded to the player.
+
+Not implemented yet (fail with a clear "not supported yet" error, never silently): legacy video-host
+extractor host calls, `evaluateJavascriptViaWebview`, `parseEpub*`, `unpackJs*`, `decryptAES*`,
+`parseDates`, XPath attribute results. Dart extensions cannot run at all, only JavaScript ones.
 
 ## Tests
 

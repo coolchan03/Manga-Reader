@@ -29,6 +29,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.exceptions.resolve.CaptchaAutoResolveCoordinator
 import org.koitharu.kotatsu.core.media.MediaType
 import org.koitharu.kotatsu.core.media.asJsSource
 import org.koitharu.kotatsu.core.media.mediaType
@@ -50,6 +51,9 @@ class MediaReaderActivity : BaseActivity<ActivityMediaReaderBinding>() {
 
 	@Inject
 	lateinit var extensions: JsExtensionProvider
+
+	@Inject
+	lateinit var captchaAutoResolveCoordinator: CaptchaAutoResolveCoordinator
 
 	private val viewModel: ReaderViewModel by viewModels()
 	private var loadJob: Job? = null
@@ -201,7 +205,12 @@ class MediaReaderActivity : BaseActivity<ActivityMediaReaderBinding>() {
 		loadJob?.cancel()
 		loadJob = lifecycleScope.launch {
 			try {
-				val html = extensions.get(jsSource.id).getHtmlContent(manga.title, state.chapter.url)
+				val html = captchaAutoResolveCoordinator.runWithVerification(
+					source = jsSource,
+					mayStartVerification = true,
+				) {
+					extensions.get(jsSource.id).getHtmlContent(manga.title, state.chapter.url)
+				}
 				viewBinding.webView.loadDataWithBaseURL(
 					state.chapter.url,
 					wrapHtml(html),
@@ -230,7 +239,12 @@ class MediaReaderActivity : BaseActivity<ActivityMediaReaderBinding>() {
 		loadJob?.cancel()
 		loadJob = lifecycleScope.launch {
 			try {
-				val videos = extensions.get(jsSource.id).getVideoList(state.chapter.url)
+				val videos = captchaAutoResolveCoordinator.runWithVerification(
+					source = jsSource,
+					mayStartVerification = true,
+				) {
+					extensions.get(jsSource.id).getVideoList(state.chapter.url)
+				}
 				val selected = chooseVideo(videos)
 					?: throw IllegalStateException(getString(R.string.media_reader_no_streams))
 				startPlayer(selected)

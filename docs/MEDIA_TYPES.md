@@ -29,15 +29,16 @@ Kotatsu's search/filter UX (hide-empty global search, genre/tag filters, year ra
 
 ## Phase 3 – book reader
 
-`NOVEL` sources already flow through the manga pipeline. Needs a text reader activity (chapter
-HTML -> WebView/TextView, font/size/theme settings) routed from `AppRouter` when
-`MediaType.BOOK`.
+Mangayomi JavaScript `NOVEL` sources now open in `MediaReaderActivity`. The activity reuses
+Kotatsu's chapter/history/incognito pipeline, renders `getHtmlContent()` in a locked-down WebView,
+restores scroll position, and provides persistent text-size controls. Native Kotatsu-Redo sources
+keep their existing reader behavior.
 
 ## Phase 4 – video
 
-- New `VideoRepository` (list / details / episodes / stream URLs) parallel to `MangaRepository`.
-- Player: AndroidX Media3 ExoPlayer, position saved to history.
-- Needs Room migration for history/favourites rows to carry a media type.
+Mangayomi JavaScript `ANIME` sources use the same media activity. Episodes come from the ordinary
+chapter model; stream URLs come from `getVideoList()` and play in AndroidX Media3/ExoPlayer with
+HLS support, request headers, subtitles, episode navigation, and saved playback position.
 
 ## Phase 5 – source repos and updates
 
@@ -47,7 +48,7 @@ HTML -> WebView/TextView, font/size/theme settings) routed from `AppRouter` when
 - Format decision pending: APK plugins (extend the existing `content://` plugin provider in
   `core/parser/external`) vs. embedded JS sources.
 
-## Build note
+## Build verification
 
-The session this was written in could not reach dl.google.com or jitpack.io, so nothing here
-has been compiled. Build locally before relying on it.
+The feature branch is compiled by `.github/workflows/build-check.yml`: unit tests run first, then a
+debug APK is assembled and uploaded as a workflow artifact.

@@ -199,8 +199,10 @@ class ExploreFragment :
 		menu.findItem(R.id.action_settings).isVisible = isSingleSelection &&
 			selectedSources.none { it.mangaSource is JsMangaSource }
 		menu.findItem(R.id.action_shortcut).isVisible = isSingleSelection
-		menu.findItem(R.id.action_pin).isVisible = selectedSources.all { !it.isPinned }
-		menu.findItem(R.id.action_unpin).isVisible = selectedSources.all { it.isPinned }
+		val canChangePinState = selectedSources.isNotEmpty() &&
+			selectedSources.all { it.mangaSource is MangaParserSource }
+		menu.findItem(R.id.action_pin).isVisible = canChangePinState && selectedSources.all { !it.isPinned }
+		menu.findItem(R.id.action_unpin).isVisible = canChangePinState && selectedSources.all { it.isPinned }
 		menu.findItem(R.id.action_disable)?.isVisible = !viewModel.isAllSourcesEnabled.value &&
 			selectedSources.all { it.mangaSource is MangaParserSource }
 		menu.findItem(R.id.action_delete)?.isVisible = selectedSources.all { it.mangaSource is ExternalMangaSource }

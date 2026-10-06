@@ -5,15 +5,12 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.koitharu.kotatsu.core.nav.AppRouter
-import org.koitharu.kotatsu.core.model.isNsfw
-import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.explore.data.SourcePreset
 import org.koitharu.kotatsu.explore.data.SourcePresetsRepository
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
-import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import javax.inject.Inject
 
 @HiltViewModel
@@ -21,7 +18,6 @@ class SourcePresetEditViewModel @Inject constructor(
 	savedStateHandle: SavedStateHandle,
 	private val presetsRepository: SourcePresetsRepository,
 	private val sourcesRepository: MangaSourcesRepository,
-	private val settings: AppSettings,
 ) : BaseViewModel() {
 
 	private val presetId = savedStateHandle[AppRouter.KEY_ID] ?: NO_ID
@@ -29,8 +25,7 @@ class SourcePresetEditViewModel @Inject constructor(
 	val onSaved = MutableEventFlow<Unit>()
 	val preset = MutableStateFlow<SourcePreset?>(null)
 
-	val allLocales: Set<String> = sourcesRepository.allMangaSources
-		.mapNotNullTo(LinkedHashSet()) { it.locale.takeIf { l -> l.isNotEmpty() } }
+	val allLocales: Set<String> = sourcesRepository.getPresetLanguages()
 
 	init {
 		launchLoadingJob(Dispatchers.Default) {
@@ -49,19 +44,22 @@ class SourcePresetEditViewModel @Inject constructor(
 				val initialSources = getSourcesForLanguages(selectedLanguages)
 				presetsRepository.createPreset(title, selectedLanguages, initialSources)
 			} else {
+				val current = preset.value
 				presetsRepository.updatePreset(presetId, title, selectedLanguages)
+				if (current != null && current.languages != selectedLanguages) {
+					val oldEligible = getSourcesForLanguages(current.languages)
+					val explicitlyRemoved = oldEligible - current.sources
+					val nonLanguageExtras = current.sources - oldEligible
+					val newSources = (getSourcesForLanguages(selectedLanguages) - explicitlyRemoved) + nonLanguageExtras
+					presetsRepository.updatePresetSources(presetId, newSources)
+				}
 			}
 			onSaved.call(Unit)
 		}
 	}
 
-	private fun getSourcesForLanguages(languages: Set<String>): Set<String> {
-		if (languages.isEmpty()) return emptySet()
-		val skipNsfw = settings.isNsfwContentDisabled
-		return sourcesRepository.allMangaSources
-			.filter { it.locale in languages && (!skipNsfw || !it.isNsfw()) }
-			.mapTo(HashSet()) { it.name }
-	}
+	private fun getSourcesForLanguages(languages: Set<String>): Set<String> =
+		sourcesRepository.getSourceNamesForPresetLanguages(languages)
 
 	companion object {
 		const val NO_ID = -1L

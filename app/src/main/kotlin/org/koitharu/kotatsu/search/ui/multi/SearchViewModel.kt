@@ -23,13 +23,12 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.media.filterByMediaType
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.model.UnknownMangaSource
-import org.koitharu.kotatsu.core.model.isNsfw
+import org.koitharu.kotatsu.core.model.getLocale
 import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.prefs.ListMode
 import org.koitharu.kotatsu.core.ui.BaseViewModel
 import org.koitharu.kotatsu.core.util.ext.append
 import org.koitharu.kotatsu.core.util.ext.printStackTraceDebug
-import org.koitharu.kotatsu.core.util.ext.toLocale
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
 import org.koitharu.kotatsu.explore.data.SourcePresetsRepository
@@ -371,11 +370,8 @@ class SearchViewModel @Inject constructor(
 	}
 
 	private fun MangaSource.priority(): Int {
-		var res = 0
-		if (this is MangaParserSource) {
-			if (locale.toLocale() == Locale.getDefault()) res += 2
-		}
-		return res
+		val sourceLocale = getLocale() ?: return 0
+		return if (sourceLocale.language == Locale.getDefault().language) 2 else 0
 	}
 
 	/**
@@ -431,11 +427,7 @@ class SearchViewModel @Inject constructor(
 		if (presetId != 0L) {
 			val preset = presetsRepository.getById(presetId)
 			if (preset != null) {
-				if (preset.sources.isEmpty()) return emptyList()
-				val skipNsfw = settings.isNsfwContentDisabled
-				return sourcesRepository.allMangaSources.filter { source ->
-					source.name in preset.sources && (!skipNsfw || !source.isNsfw())
-				}
+				return sourcesRepository.getSourcesByNames(preset.sources)
 			}
 		}
 		return if (pinnedOnly.value) {

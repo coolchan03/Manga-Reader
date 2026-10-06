@@ -18,7 +18,6 @@ import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.media.MediaType
 import org.koitharu.kotatsu.core.media.filterByMediaType
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
-import org.koitharu.kotatsu.core.model.isNsfw
 import org.koitharu.kotatsu.core.os.AppShortcutManager
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
@@ -41,7 +40,6 @@ import org.koitharu.kotatsu.list.ui.model.ListModel
 import org.koitharu.kotatsu.list.ui.model.LoadingState
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
 import org.koitharu.kotatsu.parsers.model.Manga
-import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.sourcescore.domain.SourceRanker
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
@@ -202,13 +200,8 @@ class ExploreViewModel @Inject constructor(
 			}
 		}
 
-	private fun getPresetSources(preset: SourcePreset): List<MangaSourceInfo> {
-		if (preset.sources.isEmpty()) return emptyList()
-		val skipNsfw = settings.isNsfwContentDisabled
-		return sourcesRepository.allMangaSources
-			.filter { it.name in preset.sources && (!skipNsfw || !it.isNsfw()) }
-			.map { MangaSourceInfo(it, isEnabled = true, isPinned = false) }
-	}
+	private suspend fun getPresetSources(preset: SourcePreset): List<MangaSourceInfo> =
+		sourcesRepository.getPresetSourceInfo(preset.sources)
 
 	private fun createContentFlow() = combine(
 		observeSourcesForDisplay(),

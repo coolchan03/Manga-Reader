@@ -88,9 +88,14 @@ class MangaSourcesRepository @Inject constructor(
 	suspend fun getPinnedSources(): Set<MangaSource> {
 		assimilateNewSources()
 		val skipNsfw = settings.isNsfwContentDisabled
-		return dao.findAllPinned().mapNotNullToSet {
+		val result = dao.findAllPinned().mapNotNullTo(LinkedHashSet<MangaSource>()) {
 			it.source.toMangaSourceOrNull()?.takeUnless { x -> skipNsfw && x.isNsfw() }
 		}
+		// Installed external/JS sources are intentionally always enabled and displayed as pinned.
+		// Pinned-only search must therefore include them too.
+		getExternalSources().filterTo(result) { !skipNsfw || !it.isNsfw() }
+		result.addAll(getJsSources())
+		return result
 	}
 
 	suspend fun getTopSources(limit: Int): List<MangaSource> {
@@ -381,6 +386,62 @@ class MangaSourcesRepository @Inject constructor(
 		return jsStore?.list().orEmpty()
 			.filter { !(skipNsfw && it.isNsfw) }
 			.map { JsMangaSource(it.id) }
+	}
+
+	/** Language chips used when creating a source preset, including installed JS sources. */
+	fun getPresetLanguages(): Set<String> = buildSet {
+		allMangaSources.mapNotNullTo(this) { source -> source.locale.takeIf { it.isNotEmpty() } }
+		val skipNsfw = settings.isNsfwContentDisabled
+		jsStore?.list().orEmpty().forEach { entry ->
+			if (!(skipNsfw && entry.isNsfw) && entry.lang.isNotBlank() && entry.lang != "all") {
+				add(entry.lang)
+			}
+		}
+	}
+
+	/** Source names a language-based preset should contain. `all` JS sources apply to every language. */
+	fun getSourceNamesForPresetLanguages(languages: Set<String>): Set<String> {
+		if (languages.isEmpty()) return emptySet()
+		val skipNsfw = settings.isNsfwContentDisabled
+		return buildSet {
+			allMangaSources.forEach { source ->
+				if (source.locale in languages && (!skipNsfw || !source.isNsfw())) add(source.name)
+			}
+			jsStore?.list().orEmpty().forEach { entry ->
+				if (!(skipNsfw && entry.isNsfw) && (entry.lang == "all" || entry.lang in languages)) {
+					add(JsMangaSource(entry.id).name)
+				}
+			}
+		}
+	}
+
+	/** Resolve a preset's persisted source names across built-in, external and JS source types. */
+	fun getSourcesByNames(names: Set<String>): List<MangaSource> {
+		if (names.isEmpty()) return emptyList()
+		val skipNsfw = settings.isNsfwContentDisabled
+		return buildList {
+			allMangaSources.forEach { source ->
+				if (source.name in names && (!skipNsfw || !source.isNsfw())) add(source)
+			}
+			getExternalSources().forEach { source ->
+				if (source.name in names && (!skipNsfw || !source.isNsfw())) add(source)
+			}
+			getJsSources().forEach { source -> if (source.name in names) add(source) }
+		}
+	}
+
+	/** Preset sources for Explore, preserving pin semantics for built-ins and always-pinned add-ons. */
+	suspend fun getPresetSourceInfo(names: Set<String>): List<MangaSourceInfo> {
+		if (names.isEmpty()) return emptyList()
+		assimilateNewSources()
+		val pinnedNames = dao.findAllPinned().mapTo(HashSet()) { it.source }
+		return getSourcesByNames(names).map { source ->
+			MangaSourceInfo(
+				mangaSource = source,
+				isEnabled = true,
+				isPinned = source !is MangaParserSource || source.name in pinnedNames,
+			)
+		}
 	}
 
 	fun getExternalSources(): List<ExternalMangaSource> = context.packageManager.queryIntentContentProviders(

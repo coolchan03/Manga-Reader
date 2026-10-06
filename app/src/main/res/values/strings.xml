@@ -893,6 +893,10 @@ Optional — skip it and you appear as anon.</string>
     <string name="demographic_josei">Josei</string>
     <string name="years">Years</string>
     <string name="year_filter_unsupported">This source does not support searching by year.</string>
+    <string name="publication_years">Publication years</string>
+    <string name="publication_year_from">From year</string>
+    <string name="publication_year_to">To year</string>
+    <string name="publication_year_filter_hint">Only sources that support searching with this year range will be included.</string>
     <string name="any">Any</string>
     <string name="filter_search_warning">This source does not support search with filters. Your filters have been cleared</string>
     <string name="demographic_kodomo">Kodomo</string>

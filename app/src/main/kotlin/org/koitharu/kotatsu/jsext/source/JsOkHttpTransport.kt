@@ -8,10 +8,14 @@ import org.koitharu.kotatsu.jsext.JsHttpRequest
 import org.koitharu.kotatsu.jsext.JsHttpResponse
 import org.koitharu.kotatsu.jsext.JsHttpTransport
 import org.koitharu.kotatsu.jsext.bool
+import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.util.await
 
 /** Sends a JS extension's requests through the app's scraping client (cookies, Cloudflare, rate limits). */
-class JsOkHttpTransport(private val client: OkHttpClient) : JsHttpTransport {
+class JsOkHttpTransport(
+	private val client: OkHttpClient,
+	private val source: MangaSource? = null,
+) : JsHttpTransport {
 
 	override suspend fun execute(request: JsHttpRequest): JsHttpResponse {
 		val effectiveClient = if (request.options?.get("followRedirects").bool() == false) {
@@ -20,6 +24,11 @@ class JsOkHttpTransport(private val client: OkHttpClient) : JsHttpTransport {
 			client
 		}
 		val builder = Request.Builder().url(request.url)
+		if (source != null) {
+			// Kotatsu's CloudFlareInterceptor reads this tag and routes CAPTCHA challenges through
+			// the same resolver used by built-in parser sources.
+			builder.tag(MangaSource::class.java, source)
+		}
 		request.headers.forEach { (name, value) -> builder.header(name, value) }
 		val contentType = request.headers.entries
 			.firstOrNull { it.key.equals("content-type", ignoreCase = true) }?.value?.toMediaTypeOrNull()

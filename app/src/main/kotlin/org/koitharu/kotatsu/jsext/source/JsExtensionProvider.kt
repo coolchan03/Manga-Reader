@@ -27,7 +27,6 @@ class JsExtensionProvider @Inject constructor(
 
 	private val mutex = Mutex()
 	private val live = HashMap<Long, Live>()
-	private val transport by lazy { JsOkHttpTransport(client) }
 
 	suspend fun get(id: Long): JsExtension = mutex.withLock {
 		val installed = store.get(id)
@@ -41,7 +40,7 @@ class JsExtensionProvider @Inject constructor(
 		val extension = JsExtension(
 			info = installed.entry.toSourceInfo(),
 			code = installed.code,
-			http = transport,
+			http = JsOkHttpTransport(client, JsMangaSource(id)),
 			preferences = object : JsPreferenceStore {
 				override fun getString(key: String): String? = prefs.getString(key, null)
 				override fun setString(key: String, value: String) = prefs.edit { putString(key, value) }

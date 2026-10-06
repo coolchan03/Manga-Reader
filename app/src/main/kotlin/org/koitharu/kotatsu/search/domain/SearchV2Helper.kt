@@ -29,12 +29,17 @@ class SearchV2Helper @AssistedInject constructor(
 	private val probeRecorder: SourceProbeRecorder,
 ) {
 
-	suspend operator fun invoke(query: String, kind: SearchKind): SearchResults? {
+	suspend operator fun invoke(
+		query: String,
+		kind: SearchKind,
+		yearFrom: Int? = null,
+		yearTo: Int? = null,
+	): SearchResults? {
 		if (settings.isNsfwContentDisabled && source.isNsfw()) {
 			return null
 		}
 		val repository = mangaRepositoryFactory.create(source)
-		val listFilter = repository.getFilter(query, kind) ?: return null
+		val listFilter = repository.getFilter(query, kind, yearFrom, yearTo) ?: return null
 		val sortOrder = repository.getSortOrder(kind)
 		// The one choke point every per-source search passes through, which is why the probe lives
 		// here instead of being scattered across call sites. An empty result is recorded as a success
@@ -56,7 +61,13 @@ class SearchV2Helper @AssistedInject constructor(
 		return SearchResults(listFilter = listFilter, sortOrder = sortOrder, manga = result)
 	}
 
-	private suspend fun MangaRepository.getFilter(query: String, kind: SearchKind): MangaListFilter? = when (kind) {
+	private suspend fun MangaRepository.getFilter(
+		query: String,
+		kind: SearchKind,
+		yearFrom: Int?,
+		yearTo: Int?,
+	): MangaListFilter? {
+		val base = when (kind) {
 		SearchKind.SIMPLE,
 		SearchKind.TITLE -> if (filterCapabilities.isSearchSupported) {
 			MangaListFilter(query = query)
@@ -80,11 +91,20 @@ class SearchV2Helper @AssistedInject constructor(
 			}.getOrDefault(emptySet())
 			val wanted = query.normalizedTag()
 			val tag = tags.find { x -> x.title.normalizedTag() == wanted }
-			if (tag != null) {
-				MangaListFilter(tags = setOf(tag))
-			} else {
-				null
-			}
+			if (tag != null) MangaListFilter(tags = setOf(tag)) else null
+		}
+		}
+		base ?: return null
+		if (yearFrom == null && yearTo == null) return base
+		// A global date filter must be truthful. If a source cannot combine text search with its
+		// year filter, skip it instead of showing unfiltered results under a filtered heading.
+		if (!filterCapabilities.isSearchWithFiltersSupported) return null
+		val from = yearFrom ?: yearTo ?: return base
+		val to = yearTo ?: yearFrom ?: return base
+		return when {
+			filterCapabilities.isYearRangeSupported -> base.copy(yearFrom = minOf(from, to), yearTo = maxOf(from, to))
+			filterCapabilities.isYearSupported && from == to -> base.copy(year = from)
+			else -> null
 		}
 	}
 

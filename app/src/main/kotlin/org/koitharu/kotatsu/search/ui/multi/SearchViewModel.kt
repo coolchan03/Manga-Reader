@@ -74,7 +74,11 @@ class SearchViewModel @Inject constructor(
 
 	private var includeDisabledSources = MutableStateFlow(false)
 	private var pinnedOnly = MutableStateFlow(false)
-	private var hideEmpty = MutableStateFlow(false)
+	// The combined search is most useful as a single clean answer, so dead/empty sources stay hidden
+	// unless the user explicitly asks to see them.
+	private var hideEmpty = MutableStateFlow(true)
+	private var yearFrom = MutableStateFlow<Int?>(null)
+	private var yearTo = MutableStateFlow<Int?>(null)
 	private val results = MutableStateFlow<List<SearchResultsListModel>>(emptyList())
 
 	/**
@@ -152,6 +156,27 @@ class SearchViewModel @Inject constructor(
 		hideEmpty.value = value
 	}
 
+	val isHideEmptyEnabled: Boolean
+		get() = hideEmpty.value
+
+	val publicationYearFrom: Int?
+		get() = yearFrom.value
+
+	val publicationYearTo: Int?
+		get() = yearTo.value
+
+	val hasPublicationYearFilter: Boolean
+		get() = yearFrom.value != null || yearTo.value != null
+
+	fun setPublicationYearRange(from: Int?, to: Int?) {
+		val normalizedFrom = from?.takeIf { it > 0 }
+		val normalizedTo = to?.takeIf { it > 0 }
+		if (yearFrom.value == normalizedFrom && yearTo.value == normalizedTo) return
+		yearFrom.value = normalizedFrom
+		yearTo.value = normalizedTo
+		retry()
+	}
+
 	fun continueSearch() {
 		if (includeDisabledSources.value) {
 			return
@@ -182,9 +207,13 @@ class SearchViewModel @Inject constructor(
 		val prevJob = searchJob
 		searchJob = launchLoadingJob(Dispatchers.Default) {
 			prevJob?.cancelAndJoin()
-			appendResult(searchHistory())
-			appendResult(searchFavorites())
-			appendResult(searchLocal())
+			// History/favourites/local rows do not carry a trustworthy publication year, so omit them
+			// while a year filter is active instead of pretending they matched it.
+			if (!hasPublicationYearFilter) {
+				appendResult(searchHistory())
+				appendResult(searchFavorites())
+				appendResult(searchLocal())
+			}
 			val sources = getPresetSourcesOrDefault().rankedForSweep(batch = 0)
 			val semaphore = Semaphore(MAX_PARALLELISM)
 			sources.map { source ->
@@ -201,7 +230,7 @@ class SearchViewModel @Inject constructor(
 
 	private suspend fun searchSource(source: MangaSource): SearchResultsListModel? = runCatchingCancellable {
 		val searchHelper = searchHelperFactory.create(source)
-		searchHelper(query, kind)
+		searchHelper(query, kind, yearFrom.value, yearTo.value)
 	}.fold(
 		onSuccess = { result ->
 			if (result == null || result.manga.isEmpty()) {

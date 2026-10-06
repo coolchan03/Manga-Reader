@@ -80,8 +80,16 @@ class JsMangaRepository(
 			MangaPage(id = uid(it.url), url = it.url, preview = null, source = source)
 		}
 
-		JsItemType.NOVEL -> throw UnsupportedOperationException("Reading novels is not available yet")
-		JsItemType.ANIME -> throw UnsupportedOperationException("Video playback is not available yet")
+		// Text/video readers use one synthetic page so Kotatsu's existing chapter/history loader can
+		// keep doing chapter selection and persistence. The media reader never treats this URL as an image.
+		JsItemType.NOVEL, JsItemType.ANIME -> listOf(
+			MangaPage(
+				id = uid("media:${chapter.url}"),
+				url = chapter.url,
+				preview = null,
+				source = source,
+			),
+		)
 	}
 
 	override suspend fun getPageUrl(page: MangaPage): String = page.url

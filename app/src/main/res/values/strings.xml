@@ -1192,6 +1192,15 @@ Optional — skip it and you appear as anon.</string>
     <string name="media_type_manga">Manga</string>
     <string name="media_type_book">Books</string>
     <string name="media_type_video">Video</string>
+    <string name="media_reader_content_error">Could not load this chapter or episode.</string>
+    <string name="media_reader_source_unsupported">This media type is not supported by this installed source.</string>
+    <string name="media_reader_no_streams">This episode did not return a playable video stream.</string>
+    <string name="media_reader_decrease_text">Decrease text size</string>
+    <string name="media_reader_increase_text">Increase text size</string>
+    <string name="media_reader_decrease_text_short" translatable="false">A−</string>
+    <string name="media_reader_increase_text_short" translatable="false">A+</string>
+    <string name="media_reader_previous_short" translatable="false">‹</string>
+    <string name="media_reader_next_short" translatable="false">›</string>
     <string name="js_source_installed">Source installed</string>
     <string name="js_source_remove_confirm">Remove this source?</string>
     <string name="dart_sources_skipped">%1$d sources in this repository need Mangayomi\'s Dart runtime and cannot be used here.</string>

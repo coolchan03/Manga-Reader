@@ -275,6 +275,9 @@ dependencies {
 	implementation libs.ssiv
 	implementation libs.disk.lru.cache
 	implementation libs.markwon
+	implementation libs.media3.exoplayer
+	implementation libs.media3.exoplayer.hls
+	implementation libs.media3.ui
 	implementation libs.kizzyrpc
 
 	implementation libs.acra.dialog

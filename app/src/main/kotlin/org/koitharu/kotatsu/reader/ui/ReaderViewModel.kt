@@ -34,6 +34,7 @@ import org.koitharu.kotatsu.bookmarks.domain.BookmarksRepository
 import org.koitharu.kotatsu.core.exceptions.EmptyMangaException
 import org.koitharu.kotatsu.core.exceptions.CloudFlareProtectedException
 import org.koitharu.kotatsu.core.exceptions.resolve.CaptchaAutoResolveCoordinator
+import org.koitharu.kotatsu.core.media.isJsContinuousMedia
 import org.koitharu.kotatsu.core.model.getPreferredBranch
 import org.koitharu.kotatsu.core.nav.MangaIntent
 import org.koitharu.kotatsu.core.nav.ReaderIntent
@@ -263,10 +264,29 @@ class ReaderViewModel @Inject constructor(
             return
         }
         val readerState = state ?: readingState.value ?: return
+        val manga = getMangaOrNull() ?: return
+        val progress = if (!manga.source.isJsContinuousMedia()) {
+            computePercent(readerState.chapterId, readerState.page)
+        } else {
+            computePercent(readerState.chapterId, readerState.page, chapterProgress = 0f)
+        }
+        historyUpdateUseCase.invokeAsync(
+            manga = manga,
+            readerState = readerState,
+            percent = progress,
+        )
+    }
+
+    /** Saves a scroll/playback position plus progress through a text or video chapter. */
+    fun saveContinuousState(position: Int, chapterProgress: Float) {
+        val readerState = readingState.value?.copy(scroll = position.coerceAtLeast(0)) ?: return
+        readingState.value = readerState
+        savedStateHandle[ReaderIntent.EXTRA_STATE] = readerState
+        if (isIncognitoMode.value != false) return
         historyUpdateUseCase.invokeAsync(
             manga = getMangaOrNull() ?: return,
             readerState = readerState,
-            percent = computePercent(readerState.chapterId, readerState.page),
+            percent = computePercent(readerState.chapterId, readerState.page, chapterProgress),
         )
     }
 
@@ -459,9 +479,15 @@ class ReaderViewModel @Inject constructor(
 
                         // save state
                         if (!isIncognitoMode.firstNotNull()) {
-                            readingState.value?.let {
-                                val percent = computePercent(it.chapterId, it.page)
-                                historyUpdateUseCase(manga, it, percent)
+                            readingState.value?.let { state ->
+                                val percent = if (!manga.source.isJsContinuousMedia()) {
+                                    computePercent(state.chapterId, state.page)
+                                } else {
+                                    val existing = historyRepository.getOne(manga)?.percent
+                                    existing?.takeIf { ReadingProgress.isValid(it) }
+                                        ?: computePercent(state.chapterId, state.page, chapterProgress = 0f)
+                                }
+                                historyUpdateUseCase(manga, state, percent)
                             }
                         }
                         notifyStateChanged()
@@ -528,14 +554,19 @@ class ReaderViewModel @Inject constructor(
         val chapter = chaptersLoader.peekChapter(state.chapterId) ?: return
         val m = mangaDetails.value ?: return
         val chapterIndex = m.chapters[chapter.branch]?.indexOfFirst { it.id == chapter.id } ?: -1
+        val currentManga = m.toManga()
         val newState = ReaderUiState(
-            mangaName = m.toManga().title,
+            mangaName = currentManga.title,
             chapter = chapter,
             chapterIndex = chapterIndex,
             chaptersTotal = m.chapters[chapter.branch].sizeOrZero(),
             totalPages = chaptersLoader.getPagesCount(chapter.id),
             currentPage = state.page,
-            percent = computePercent(state.chapterId, state.page),
+            percent = if (!currentManga.source.isJsContinuousMedia()) {
+                computePercent(state.chapterId, state.page)
+            } else {
+                computePercent(state.chapterId, state.page, chapterProgress = 0f)
+            },
             incognito = isIncognitoMode.value == true,
         )
         uiState.value = newState
@@ -545,16 +576,21 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun computePercent(chapterId: Long, pageIndex: Int): Float {
+    private fun computePercent(
+        chapterId: Long,
+        pageIndex: Int,
+        chapterProgress: Float? = null,
+    ): Float {
         val branch = chaptersLoader.peekChapter(chapterId)?.branch
         val chapters = mangaDetails.value?.chapters?.get(branch) ?: return PROGRESS_NONE
         val chaptersCount = chapters.size
         val chapterIndex = chapters.indexOfFirst { x -> x.id == chapterId }
         val pagesCount = chaptersLoader.getPagesCount(chapterId)
-        if (chaptersCount == 0 || pagesCount == 0) {
+        if (chaptersCount == 0 || pagesCount == 0 || chapterIndex < 0) {
             return PROGRESS_NONE
         }
-        val pagePercent = (pageIndex + 1) / pagesCount.toFloat()
+        val pagePercent = chapterProgress?.coerceIn(0f, 1f)
+            ?: (pageIndex + 1) / pagesCount.toFloat()
         val ppc = 1f / chaptersCount
         return ppc * chapterIndex + ppc * pagePercent
     }

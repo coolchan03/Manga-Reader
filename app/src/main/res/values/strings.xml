@@ -1203,5 +1203,7 @@ Optional — skip it and you appear as anon.</string>
     <string name="media_reader_next_short" translatable="false">›</string>
     <string name="js_source_installed">Source installed</string>
     <string name="js_source_remove_confirm">Remove this source?</string>
+    <string name="js_source_no_preferences">This source does not expose any configurable settings.</string>
+    <string name="js_source_preferences_saved">Source settings saved</string>
     <string name="dart_sources_skipped">%1$d sources in this repository need Mangayomi\'s Dart runtime and cannot be used here.</string>
 </resources>

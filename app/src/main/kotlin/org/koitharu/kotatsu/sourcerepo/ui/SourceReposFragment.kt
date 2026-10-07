@@ -8,15 +8,30 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.text.InputType
 import android.view.View
+import android.widget.ArrayAdapter
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
+import android.widget.LinearLayout
+import android.widget.ScrollView
+import android.widget.Spinner
+import android.widget.TextView
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.viewModels
+import androidx.lifecycle.lifecycleScope
 import androidx.preference.Preference
 import androidx.preference.PreferenceCategory
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.media.MediaType
 import org.koitharu.kotatsu.core.ui.BasePreferenceFragment
@@ -24,14 +39,20 @@ import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.jsext.JsItemType
+import org.koitharu.kotatsu.jsext.repo.JsSourceEntry
+import org.koitharu.kotatsu.jsext.source.JsExtensionProvider
 import org.koitharu.kotatsu.sourcerepo.domain.JsSourceItem
 import org.koitharu.kotatsu.sourcerepo.domain.PluginEntry
 import org.koitharu.kotatsu.sourcerepo.domain.PluginState
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 
 	private val viewModel by viewModels<SourceReposViewModel>()
+
+	@Inject
+	lateinit var jsExtensions: JsExtensionProvider
 
 	private val downloadReceiver = object : BroadcastReceiver() {
 		override fun onReceive(context: Context, intent: Intent) {
@@ -178,17 +199,195 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 	}
 
 	private fun onJsSourceClick(item: JsSourceItem) {
-		if (item.state == PluginState.INSTALLED) {
-			MaterialAlertDialogBuilder(requireContext())
-				.setTitle(item.entry.name)
-				.setMessage(R.string.js_source_remove_confirm)
-				.setNegativeButton(android.R.string.cancel, null)
-				.setPositiveButton(R.string.remove) { _, _ -> viewModel.uninstallJs(item.entry) }
-				.show()
-		} else {
-			viewModel.installJs(item.entry)
+		when (item.state) {
+			PluginState.NOT_INSTALLED -> viewModel.installJs(item.entry)
+			PluginState.INSTALLED -> showJsSourceActions(item, canUpdate = false)
+			PluginState.UPDATE_AVAILABLE -> showJsSourceActions(item, canUpdate = true)
 		}
 	}
+
+	private fun showJsSourceActions(item: JsSourceItem, canUpdate: Boolean) {
+		val labels = ArrayList<CharSequence>(3)
+		val actions = ArrayList<() -> Unit>(3)
+		if (canUpdate) {
+			labels += getString(R.string.update)
+			actions += { viewModel.installJs(item.entry) }
+		}
+		labels += getString(R.string.settings)
+		actions += { openJsSourceSettings(item.entry) }
+		labels += getString(R.string.remove)
+		actions += { confirmJsSourceRemove(item.entry) }
+		MaterialAlertDialogBuilder(requireContext())
+			.setTitle(item.entry.name)
+			.setItems(labels.toTypedArray()) { _, which -> actions[which]() }
+			.setNegativeButton(android.R.string.cancel, null)
+			.show()
+	}
+
+	private fun confirmJsSourceRemove(entry: JsSourceEntry) {
+		MaterialAlertDialogBuilder(requireContext())
+			.setTitle(entry.name)
+			.setMessage(R.string.js_source_remove_confirm)
+			.setNegativeButton(android.R.string.cancel, null)
+			.setPositiveButton(R.string.remove) { _, _ -> viewModel.uninstallJs(entry) }
+			.show()
+	}
+
+	private fun openJsSourceSettings(entry: JsSourceEntry) {
+		viewLifecycleOwner.lifecycleScope.launch {
+			val preferences = jsExtensions.getSourcePreferences(entry.id)
+			if (preferences.isEmpty()) {
+				Toast.makeText(requireContext(), R.string.js_source_no_preferences, Toast.LENGTH_SHORT).show()
+				return@launch
+			}
+			showJsSourcePreferences(entry, preferences)
+		}
+	}
+
+	private fun showJsSourcePreferences(entry: JsSourceEntry, preferences: List<JsonObject>) {
+		val context = requireContext()
+		val density = resources.displayMetrics.density
+		val gap = (8 * density).toInt()
+		val padding = resources.getDimensionPixelSize(R.dimen.margin_normal)
+		val fields = ArrayList<Pair<String, () -> String?>>()
+		val content = LinearLayout(context).apply {
+			orientation = LinearLayout.VERTICAL
+			setPadding(padding, gap, padding, gap)
+		}
+
+		fun addHeading(title: String, summary: String?) {
+			content.addView(TextView(context).apply {
+				text = title
+				setPadding(0, gap, 0, 0)
+			})
+			if (!summary.isNullOrBlank()) {
+				content.addView(TextView(context).apply {
+					text = summary
+					alpha = 0.72f
+				})
+			}
+		}
+
+		for (definition in preferences) {
+			val key = definition.string("key") ?: continue
+			val stored = jsExtensions.getPreference(entry.id, key)
+
+			val editText = definition["editTextPreference"] as? JsonObject
+			if (editText != null) {
+				addHeading(editText.string("title") ?: key, editText.string("summary"))
+				val defaultValue = editText.string("value").orEmpty()
+				val input = EditText(context).apply {
+					setSingleLine(false)
+					setText(stored ?: defaultValue)
+					hint = editText.string("dialogMessage")
+					inputType = if ((stored ?: defaultValue).startsWith("http")) {
+						InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+					} else {
+						InputType.TYPE_CLASS_TEXT
+					}
+				}
+				content.addView(input)
+				fields += key to { input.text?.toString() }
+				continue
+			}
+
+			val toggle = (definition["switchPreferenceCompat"] as? JsonObject)
+				?: (definition["checkBoxPreference"] as? JsonObject)
+			if (toggle != null) {
+				val box = CheckBox(context).apply {
+					text = toggle.string("title") ?: key
+					isChecked = stored?.toBooleanStrictOrNull()
+						?: toggle.boolean("value")
+						?: false
+				}
+				content.addView(box)
+				toggle.string("summary")?.takeIf { it.isNotBlank() }?.let { summary ->
+					content.addView(TextView(context).apply {
+						text = summary
+						alpha = 0.72f
+					})
+				}
+				fields += key to { box.isChecked.toString() }
+				continue
+			}
+
+			val list = definition["listPreference"] as? JsonObject
+			if (list != null) {
+				val values = list.stringArray("entryValues")
+				if (values.isEmpty()) continue
+				val entries = list.stringArray("entries").takeIf { it.size == values.size } ?: values
+				addHeading(list.string("title") ?: key, list.string("summary"))
+				val spinner = Spinner(context).apply {
+					adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item, entries)
+					val defaultIndex = list.int("valueIndex")?.coerceIn(0, values.lastIndex) ?: 0
+					setSelection(values.indexOf(stored).takeIf { it >= 0 } ?: defaultIndex)
+				}
+				content.addView(spinner)
+				fields += key to { values.getOrNull(spinner.selectedItemPosition) }
+				continue
+			}
+
+			val multiSelect = definition["multiSelectListPreference"] as? JsonObject
+			if (multiSelect != null) {
+				val values = multiSelect.stringArray("entryValues")
+				if (values.isEmpty()) continue
+				val entries = multiSelect.stringArray("entries").takeIf { it.size == values.size } ?: values
+				val defaults = multiSelect.stringArray("values").toSet()
+				val selected = stored?.let { raw ->
+					runCatching {
+						(Json.parseToJsonElement(raw) as? JsonArray)
+							.orEmpty()
+							.mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
+							.toSet()
+					}.getOrNull()
+				} ?: defaults
+				addHeading(multiSelect.string("title") ?: key, multiSelect.string("summary"))
+				val boxes = entries.mapIndexed { index, label ->
+					CheckBox(context).apply {
+						text = label
+						isChecked = values[index] in selected
+						content.addView(this)
+					}
+				}
+				fields += key to {
+					JsonArray(
+						boxes.mapIndexedNotNull { index, box ->
+							values.getOrNull(index)?.takeIf { box.isChecked }?.let(::JsonPrimitive)
+						},
+					).toString()
+				}
+			}
+		}
+
+		if (fields.isEmpty()) {
+			Toast.makeText(context, R.string.js_source_no_preferences, Toast.LENGTH_SHORT).show()
+			return
+		}
+		val scroll = ScrollView(context).apply { addView(content) }
+		MaterialAlertDialogBuilder(context)
+			.setTitle(entry.name)
+			.setView(scroll)
+			.setNegativeButton(android.R.string.cancel, null)
+			.setPositiveButton(R.string.apply) { _, _ ->
+				for ((key, value) in fields) {
+					jsExtensions.setPreference(entry.id, key, value())
+				}
+				Toast.makeText(context, R.string.js_source_preferences_saved, Toast.LENGTH_SHORT).show()
+			}
+			.show()
+	}
+
+	private fun JsonObject.string(key: String): String? =
+		(this[key] as? JsonPrimitive)?.contentOrNull
+
+	private fun JsonObject.boolean(key: String): Boolean? =
+		(this[key] as? JsonPrimitive)?.booleanOrNull
+
+	private fun JsonObject.int(key: String): Int? =
+		(this[key] as? JsonPrimitive)?.intOrNull
+
+	private fun JsonObject.stringArray(key: String): List<String> =
+		(this[key] as? JsonArray).orEmpty().mapNotNull { (it as? JsonPrimitive)?.contentOrNull }
 
 	private fun onPluginClick(entry: PluginEntry) {
 		if (entry.state == PluginState.INSTALLED) {

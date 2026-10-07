@@ -6,6 +6,8 @@ import androidx.core.content.edit
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import okhttp3.OkHttpClient
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.core.network.MangaHttpClient
@@ -28,6 +30,21 @@ class JsExtensionProvider @Inject constructor(
 	private val mutex = Mutex()
 	private val live = HashMap<Long, Live>()
 
+	private fun prefs(id: Long) = context.getSharedPreferences("js_source_$id", Context.MODE_PRIVATE)
+
+	/** Preferences declared by the installed Mangayomi source. Most sources declare none. */
+	suspend fun getSourcePreferences(id: Long): List<JsonObject> = runCatching {
+		(get(id).getSourcePreferences() as? JsonArray).orEmpty().mapNotNull { it as? JsonObject }
+	}.getOrDefault(emptyList())
+
+	fun getPreference(id: Long, key: String): String? = prefs(id).getString(key, null)
+
+	fun setPreference(id: Long, key: String, value: String?) {
+		prefs(id).edit {
+			if (value == null) remove(key) else putString(key, value)
+		}
+	}
+
 	suspend fun get(id: Long): JsExtension = mutex.withLock {
 		val installed = store.get(id)
 		if (installed == null) {
@@ -36,7 +53,7 @@ class JsExtensionProvider @Inject constructor(
 		}
 		live[id]?.takeIf { it.version == installed.entry.version }?.let { return it.extension }
 		live.remove(id)?.extension?.close()
-		val prefs = context.getSharedPreferences("js_source_$id", Context.MODE_PRIVATE)
+		val prefs = prefs(id)
 		val extension = JsExtension(
 			info = installed.entry.toSourceInfo(),
 			code = installed.code,

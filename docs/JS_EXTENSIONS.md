@@ -23,7 +23,7 @@ sync or async, so a small prelude routes the async names (HTTP, extractors) to a
 
 Implemented: `Client` (all verbs), `Document`/`Element` (select, selectFirst, attr, text, innerHtml,
 outerHtml, getSrc/getHref/getImg/getDataSrc, siblings, children, by tag/class/id), `SharedPreferences`
-with `getSourcePreferences()` defaults, `console.*`, `cryptoHandler`, and the full extension contract
+with `getSourcePreferences()` defaults and editable source settings (text, toggle, single-choice and multi-choice preferences), `console.*`, `cryptoHandler`, and the full extension contract
 (`getPopular`, `getLatestUpdates`, `search`, `getDetail`, `getPageList`, `getVideoList`,
 `getHtmlContent`, `cleanHtmlContent`, `getFilterList`). JS network requests use Kotatsu's scraping
 client and carry their source identity, so Cloudflare challenges can use Kotatsu's normal automatic

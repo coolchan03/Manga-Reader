@@ -34,6 +34,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.media.MediaType
+import org.koitharu.kotatsu.core.nav.AppRouter
 import org.koitharu.kotatsu.core.ui.BasePreferenceFragment
 import org.koitharu.kotatsu.core.util.ext.getDisplayMessage
 import org.koitharu.kotatsu.core.util.ext.observe
@@ -41,6 +42,7 @@ import org.koitharu.kotatsu.core.util.ext.observeEvent
 import org.koitharu.kotatsu.jsext.JsItemType
 import org.koitharu.kotatsu.jsext.repo.JsSourceEntry
 import org.koitharu.kotatsu.jsext.source.JsExtensionProvider
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.sourcerepo.domain.JsSourceItem
 import org.koitharu.kotatsu.sourcerepo.domain.PluginEntry
 import org.koitharu.kotatsu.sourcerepo.domain.PluginState
@@ -215,6 +217,19 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 		}
 		labels += getString(R.string.settings)
 		actions += { openJsSourceSettings(item.entry) }
+		if (item.entry.baseUrl.startsWith("http")) {
+			labels += getString(R.string.open_in_browser)
+			actions += {
+				startActivity(
+					AppRouter.browserIntent(
+						requireContext(),
+						item.entry.baseUrl,
+						JsMangaSource(item.entry.id),
+						item.entry.name,
+					),
+				)
+			}
+		}
 		labels += getString(R.string.remove)
 		actions += { confirmJsSourceRemove(item.entry) }
 		MaterialAlertDialogBuilder(requireContext())

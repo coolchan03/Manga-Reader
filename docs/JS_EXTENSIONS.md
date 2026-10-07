@@ -39,6 +39,16 @@ Not implemented yet (fail with a clear "not supported yet" error, never silently
 extractor host calls, `evaluateJavascriptViaWebview`, `unpackJs*`, `decryptAES*`, `parseDates`, XPath
 attribute results. Dart extensions cannot run at all, only JavaScript ones.
 
+## Curated Manga Reader-compatible repositories
+
+The companion repository [`coolchan03/Best-BL-Mangayomi-Extensions`](https://github.com/coolchan03/Best-BL-Mangayomi-Extensions) publishes JavaScript-only Mangayomi indexes that can be added directly from **Settings -> Source repositories**:
+
+- Manga: `https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/index.json`
+- Anime/video: `https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/anime_index.json`
+- Novels/books: `https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/novel_index.json`
+
+The repository also keeps broader `manga.json`, `anime.json`, and `novel.json` catalogs containing Dart/APK-style entries for reference, but Manga Reader only executes the JavaScript-only indexes above.
+
 ## Tests
 
 `JsExtensionTest` runs the real `wordrain69.js` against canned HTML. It needs QuickJS's desktop

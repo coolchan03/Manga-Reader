@@ -17,6 +17,8 @@ import org.koitharu.kotatsu.core.db.sourceCondition
 import org.koitharu.kotatsu.core.db.TABLE_HISTORY
 import org.koitharu.kotatsu.core.db.entity.MangaWithTags
 import org.koitharu.kotatsu.core.db.entity.TagEntity
+import org.koitharu.kotatsu.core.media.MediaType
+import org.koitharu.kotatsu.core.media.persistedSourceNames
 import org.koitharu.kotatsu.list.domain.ListFilterOption
 import org.koitharu.kotatsu.search.domain.ScreenFilterLog
 import org.koitharu.kotatsu.list.domain.ListSortOrder
@@ -236,6 +238,18 @@ abstract class HistoryDao : MangaQueryBuilder.ConditionCallback {
 		is ListFilterOption.Tag -> "EXISTS(SELECT * FROM manga_tags WHERE history.manga_id = manga_tags.manga_id AND tag_id = ${option.tagId})"
 		ListFilterOption.Downloaded -> "EXISTS(SELECT * FROM local_index WHERE local_index.manga_id = history.manga_id)"
 		is ListFilterOption.Source -> "manga.source = ${sqlEscapeString(option.mangaSource.name)}"
+		is ListFilterOption.MediaType -> mediaTypeCondition(option.mediaType)
 		else -> null
+	}
+
+	private fun mediaTypeCondition(type: MediaType): String {
+		val names = if (type == MediaType.MANGA) {
+			MediaType.BOOK.persistedSourceNames() + MediaType.VIDEO.persistedSourceNames()
+		} else {
+			type.persistedSourceNames()
+		}
+		if (names.isEmpty()) return if (type == MediaType.MANGA) "1" else "0"
+		val list = names.joinToString(",", transform = ::sqlEscapeString)
+		return if (type == MediaType.MANGA) "manga.source NOT IN ($list)" else "manga.source IN ($list)"
 	}
 }

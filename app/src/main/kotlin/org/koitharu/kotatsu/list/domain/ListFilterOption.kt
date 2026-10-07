@@ -4,6 +4,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.db.entity.toEntity
+import org.koitharu.kotatsu.core.media.MediaType as AppMediaType
 import org.koitharu.kotatsu.core.model.FavouriteCategory
 import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.model.titleResId
@@ -150,6 +151,27 @@ sealed interface ListFilterOption {
 			get() = "_source"
 
 		override fun getIconData() = mangaSource.faviconUri()
+	}
+
+	data class MediaType(
+		val mediaType: AppMediaType,
+	) : ListFilterOption {
+
+		override val titleResId: Int
+			get() = when (mediaType) {
+				AppMediaType.MANGA -> R.string.media_type_manga
+				AppMediaType.BOOK -> R.string.media_type_book
+				AppMediaType.VIDEO -> R.string.media_type_video
+			}
+
+		override val iconResId: Int
+			get() = R.drawable.ic_book_page
+
+		override val titleText: CharSequence?
+			get() = null
+
+		override val groupKey: String
+			get() = "_media_type"
 	}
 
 	data class ContentType(

@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.history.domain
 
+import org.koitharu.kotatsu.core.media.MediaType
 import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.history.data.HistoryRepository
@@ -23,6 +24,9 @@ class HistoryListQuickFilter @Inject constructor(
 			add(ListFilterOption.Macro.NEW_CHAPTERS)
 		}
 		add(ListFilterOption.Macro.COMPLETED)
+		add(ListFilterOption.MediaType(MediaType.MANGA))
+		add(ListFilterOption.MediaType(MediaType.BOOK))
+		add(ListFilterOption.MediaType(MediaType.VIDEO))
 		add(ListFilterOption.Macro.FAVORITE)
 		add(ListFilterOption.NOT_FAVORITE)
 		if (!settings.isNsfwContentDisabled) {

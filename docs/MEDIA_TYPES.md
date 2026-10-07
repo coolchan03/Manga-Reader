@@ -23,7 +23,7 @@ Kotatsu's search/filter UX (hide-empty global search, genre/tag filters, year ra
 - Explore: media-type chips (All / Manga / Books / Video) filtering the source list
   (`explore/ui/ExploreViewModel.kt`).
 - Global search: same chips; keep `hideEmpty` and make it default-on.
-- Library (history, favourites): group/filter by `MediaType`.
+- Library (history, favourites): quick-filter by `MediaType` (Manga / Books / Video) without a database migration; JS source ids and native parser types are classified at query time.
 - Filter sheet: show the year slider as disabled-with-hint instead of hiding it when a source
   has no year support, so "search by age" is discoverable.
 

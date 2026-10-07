@@ -12,6 +12,8 @@ object JsSourceRegistry {
 
 	fun get(id: Long): JsSourceEntry? = entries[id]
 
+	fun list(): List<JsSourceEntry> = entries.values.toList()
+
 	internal fun replaceAll(list: List<JsSourceEntry>) {
 		entries.keys.retainAll(list.mapTo(HashSet()) { it.id })
 		list.forEach { entries[it.id] = it }

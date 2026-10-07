@@ -1,5 +1,6 @@
 package org.koitharu.kotatsu.core.media
 
+import org.koitharu.kotatsu.core.model.LocalMangaSource
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.jsext.JsItemType
 import org.koitharu.kotatsu.jsext.repo.JsSourceRegistry
@@ -34,3 +35,22 @@ fun MangaSource.mediaType(): MediaType {
 
 fun <T : MangaSource> List<T>.filterByMediaType(type: MediaType?): List<T> =
 	if (type == null) this else filter { type.accepts(it.mediaType()) }
+
+/** Source names persisted in the manga table that currently belong to this media kind. */
+fun MediaType.persistedSourceNames(): Set<String> = buildSet {
+	MangaParserSource.entries
+		.filter { it.contentType.toMediaType() == this@persistedSourceNames }
+		.mapTo(this) { it.name }
+	JsSourceRegistry.list()
+		.filter { entry ->
+			when (entry.itemType) {
+				JsItemType.MANGA -> this@persistedSourceNames == MediaType.MANGA
+				JsItemType.NOVEL -> this@persistedSourceNames == MediaType.BOOK
+				JsItemType.ANIME -> this@persistedSourceNames == MediaType.VIDEO
+			}
+		}
+		.mapTo(this) { JsMangaSource(it.id).name }
+	if (this@persistedSourceNames == MediaType.MANGA) {
+		add(LocalMangaSource.name)
+	}
+}

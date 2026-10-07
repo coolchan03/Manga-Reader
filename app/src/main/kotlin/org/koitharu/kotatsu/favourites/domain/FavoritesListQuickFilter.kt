@@ -3,6 +3,7 @@ package org.koitharu.kotatsu.favourites.domain
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedFactory
 import dagger.assisted.AssistedInject
+import org.koitharu.kotatsu.core.media.MediaType
 import org.koitharu.kotatsu.core.os.NetworkState
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.list.domain.ListFilterOption
@@ -26,6 +27,9 @@ class FavoritesListQuickFilter @AssistedInject constructor(
 			add(ListFilterOption.Macro.NEW_CHAPTERS)
 		}
 		add(ListFilterOption.Macro.COMPLETED)
+		add(ListFilterOption.MediaType(MediaType.MANGA))
+		add(ListFilterOption.MediaType(MediaType.BOOK))
+		add(ListFilterOption.MediaType(MediaType.VIDEO))
 		add(ListFilterOption.ContentType(ContentType.MANGA))
 		add(ListFilterOption.ContentType(ContentType.MANHWA))
 		add(ListFilterOption.ContentType(ContentType.MANHUA))

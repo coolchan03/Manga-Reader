@@ -125,6 +125,33 @@ class JsExtensionTest {
 	}
 
 	@Test
+	fun listAndSwitchPreferenceDefaultsAndOverridesMatchMangayomi() = runBlocking {
+		val code = """
+			class DefaultExtension extends MProvider {
+			  getSourcePreferences() {
+			    return [
+			      { key: "language", listPreference: { valueIndex: 0, entryValues: ["ja-JP", "en-US"] } },
+			      { key: "enabled", switchPreferenceCompat: { value: true } }
+			    ];
+			  }
+			  async getPopular(page) {
+			    const prefs = new SharedPreferences();
+			    return {
+			      list: [{ name: `${'$'}{prefs.get("language")}|${'$'}{prefs.get("enabled")}`, link: "https://test/item", imageUrl: "" }],
+			      hasNextPage: false
+			    };
+			  }
+			}
+		""".trimIndent()
+		extension(code).use { ext ->
+			assertEquals("ja-JP|true", ext.getPopular(1).list.single().name)
+			store.data["language"] = "en-US"
+			store.data["enabled"] = "false"
+			assertEquals("en-US|false", ext.getPopular(1).list.single().name)
+		}
+	}
+
+	@Test
 	fun brokenSourceReportsWhyInsteadOfLookingEmpty() = runBlocking {
 		extension("class DefaultExtension extends MProvider { constructor() { throw new Error('boom'); } }").use { ext ->
 			try {

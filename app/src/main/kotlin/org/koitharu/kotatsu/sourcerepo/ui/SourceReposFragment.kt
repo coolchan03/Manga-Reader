@@ -384,10 +384,12 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 			.setView(scroll)
 			.setNegativeButton(android.R.string.cancel, null)
 			.setPositiveButton(R.string.apply) { _, _ ->
-				for ((key, value) in fields) {
-					jsExtensions.setPreference(entry.id, key, value())
+				viewLifecycleOwner.lifecycleScope.launch {
+					for ((key, value) in fields) {
+						jsExtensions.setPreference(entry.id, key, value())
+					}
+					Toast.makeText(context, R.string.js_source_preferences_saved, Toast.LENGTH_SHORT).show()
 				}
-				Toast.makeText(context, R.string.js_source_preferences_saved, Toast.LENGTH_SHORT).show()
 			}
 			.show()
 	}

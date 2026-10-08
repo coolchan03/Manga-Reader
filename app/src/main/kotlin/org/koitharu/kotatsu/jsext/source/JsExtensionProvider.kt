@@ -13,6 +13,7 @@ import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.core.network.MangaHttpClient
 import org.koitharu.kotatsu.jsext.JsExtension
 import org.koitharu.kotatsu.jsext.JsPreferenceStore
+import org.koitharu.kotatsu.jsext.repo.JsSourceEntry
 import org.koitharu.kotatsu.jsext.repo.JsSourceStore
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -25,7 +26,7 @@ class JsExtensionProvider @Inject constructor(
 	private val store: JsSourceStore,
 ) {
 
-	private class Live(val version: String, val extension: JsExtension)
+	private class Live(val entry: JsSourceEntry, val codeHash: Int, val extension: JsExtension)
 
 	private val mutex = Mutex()
 	private val live = HashMap<Long, Live>()
@@ -39,9 +40,14 @@ class JsExtensionProvider @Inject constructor(
 
 	fun getPreference(id: Long, key: String): String? = prefs(id).getString(key, null)
 
-	fun setPreference(id: Long, key: String, value: String?) {
+	suspend fun setPreference(id: Long, key: String, value: String?) {
 		prefs(id).edit {
 			if (value == null) remove(key) else putString(key, value)
+		}
+		// Some extensions derive state from preferences during construction. Recreate the live
+		// QuickJS runtime after a settings change so those sources observe the new value reliably.
+		mutex.withLock {
+			live.remove(id)?.extension?.close()
 		}
 	}
 
@@ -51,7 +57,8 @@ class JsExtensionProvider @Inject constructor(
 			live.remove(id)?.extension?.close()
 			throw IllegalStateException("JS source $id is not installed")
 		}
-		live[id]?.takeIf { it.version == installed.entry.version }?.let { return it.extension }
+		val codeHash = installed.code.hashCode()
+		live[id]?.takeIf { it.entry == installed.entry && it.codeHash == codeHash }?.let { return it.extension }
 		live.remove(id)?.extension?.close()
 		val prefs = prefs(id)
 		val extension = JsExtension(
@@ -64,7 +71,7 @@ class JsExtensionProvider @Inject constructor(
 			},
 			logger = { message -> if (BuildConfig.DEBUG) Log.d("JsExtension", message) },
 		)
-		live[id] = Live(installed.entry.version, extension)
+		live[id] = Live(installed.entry, codeHash, extension)
 		extension
 	}
 }

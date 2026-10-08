@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">Kotatsu-Redo</string>
+    <string name="app_name" translatable="false">Monogatari</string>
     <string name="local_storage">Local storage</string>
     <string name="favourites">Favorites</string>
     <string name="history">History</string>
@@ -14,8 +14,8 @@
     <string name="list_mode">List mode</string>
     <string name="settings">Settings</string>
     <string name="remote_sources">Manga sources</string>
-    <string name="loading_">Loading…</string>
-    <string name="computing_">Computing…</string>
+    <string name="loading_">Loadingâ€¦</string>
+    <string name="computing_">Computingâ€¦</string>
     <string name="chapter_d_of_d">Chapter %1$d of %2$d</string>
     <string name="close">Close</string>
     <string name="try_again">Try again</string>
@@ -35,8 +35,8 @@
     <string name="share_s">Share %s</string>
     <string name="search">Search</string>
     <string name="search_manga">Search manga</string>
-    <string name="manga_downloading_">Downloading…</string>
-    <string name="processing_">Processing…</string>
+    <string name="manga_downloading_">Downloadingâ€¦</string>
+    <string name="processing_">Processingâ€¦</string>
     <string name="download_complete">Downloaded</string>
     <string name="downloads">Downloads</string>
     <string name="by_name">Name</string>
@@ -96,10 +96,10 @@
     <string name="vibration">Vibration</string>
     <string name="favourites_categories">Favorite categories</string>
     <string name="remove_category">Remove</string>
-    <string name="text_empty_holder_primary">It\'s kind of empty here…</string>
+    <string name="text_empty_holder_primary">It\'s kind of empty hereâ€¦</string>
     <string name="text_search_holder_secondary">Try to reformulate the query.</string>
     <string name="text_history_holder_primary">What you read will be displayed here</string>
-    <string name="text_history_holder_secondary">Find what to read in the «Explore» section</string>
+    <string name="text_history_holder_secondary">Find what to read in the Â«ExploreÂ» section</string>
     <string name="text_empty_holder_secondary_filtered">There are no manga matching the filters you selected</string>
     <string name="text_local_holder_primary">Save something first</string>
     <string name="text_local_holder_secondary">Save something from an online catalog or import it from a file.</string>
@@ -150,7 +150,7 @@
     <string name="create_backup">Create data backup</string>
     <string name="restore_backup">Restore from backup</string>
     <string name="data_restored">Restored</string>
-    <string name="preparing_">Preparing…</string>
+    <string name="preparing_">Preparingâ€¦</string>
     <string name="file_not_found">File not found</string>
     <string name="data_restored_success">All data was restored</string>
     <string name="data_restored_with_errors">The data was restored, but there are errors</string>
@@ -165,7 +165,7 @@
     <string name="silent">Silent</string>
     <string name="captcha_required">CAPTCHA required</string>
     <string name="captcha_solve">Solve</string>
-    <string name="captcha_solving">Solving captcha automatically…</string>
+    <string name="captcha_solving">Solving captcha automaticallyâ€¦</string>
     <string name="clear_cookies">Clear cookies</string>
     <string name="cookies_cleared">All cookies were removed</string>
     <string name="clear_feed">Clear feed</string>
@@ -228,7 +228,7 @@
     <string name="same_content_type">Same content type</string>
     <string name="has_chapters">Has chapters</string>
     <string name="searching_sources_progress">%1$d/%2$d sources</string>
-    <string name="preparing_search">Preparing search…</string>
+    <string name="preparing_search">Preparing searchâ€¦</string>
     <string name="filter_active">Filter, active filters</string>
     <string name="onboard_text">Select languages which you want to read manga. You can change it later in settings.</string>
     <string name="never">Never</string>
@@ -335,7 +335,7 @@
     <string name="removed_from_favourites">Removed from favorites</string>
     <string name="options">Options</string>
     <string name="not_found_404">Content not found or removed</string>
-    <string name="download_summary_pattern" translatable="false">%1$s · %2$s</string>
+    <string name="download_summary_pattern" translatable="false">%1$s Â· %2$s</string>
     <string name="incognito_mode">Incognito mode</string>
     <string name="no_chapters">No chapters</string>
     <string name="automatic_scroll">Automatic scroll</string>
@@ -388,7 +388,7 @@
     <string name="theme_name_mamimi">Mamimi</string>
     <string name="theme_name_kanade">Kanade</string>
     <string name="nothing_here">There is nothing here</string>
-    <string name="scrobbling_empty_hint">To track reading progress, select Menu → Track on the manga details screen.</string>
+    <string name="scrobbling_empty_hint">To track reading progress, select Menu â†’ Track on the manga details screen.</string>
     <string name="services">Services</string>
     <string name="allow_unstable_updates">Allow unstable updates</string>
     <string name="allow_unstable_updates_summary">Receive notifications about unstable builds</string>
@@ -520,7 +520,7 @@
     <!-- Community features -->
     <string name="community">Community</string>
     <string name="community_rating">Reader rating</string>
-    <string name="community_rating_summary">%1$s · %2$s</string>
+    <string name="community_rating_summary">%1$s Â· %2$s</string>
     <!-- Shown on the score button before anyone has rated. -->
     <string name="community_rating_dash">\u2013</string>
     <string name="community_rating_none">No ratings yet</string>
@@ -531,9 +531,9 @@
     <string name="community_telemetry">Share source reliability</string>
     <string name="community_telemetry_summary">Anonymous, per source only. Never which manga you read.</string>
     <string name="community_server">Server</string>
-    <string name="community_server_checking">Checking…</string>
+    <string name="community_server_checking">Checkingâ€¦</string>
     <string name="community_server_ok">Connected</string>
-    <string name="community_server_unreachable">Not reachable — comments and ratings will not appear</string>
+    <string name="community_server_unreachable">Not reachable â€” comments and ratings will not appear</string>
     <string name="community_nickname">Nickname</string>
     <string name="community_nickname_summary">How you appear on comments</string>
     <string name="community_recovery">Back up my identity</string>
@@ -553,7 +553,7 @@
 
     <!-- Onboarding -->
     <string name="community_intro_title">Comments and ratings</string>
-    <string name="community_intro_body">Kotatsu-Redo can now show comments and ratings from other readers, and use what everyone learns to put the sources that actually work at the top of your searches.\n\nThere is no account. No email, no password. Your device makes a random key and that is your whole identity — you can back it up and move it to a new phone.</string>
+    <string name="community_intro_body">Kotatsu-Redo can now show comments and ratings from other readers, and use what everyone learns to put the sources that actually work at the top of your searches.\n\nThere is no account. No email, no password. Your device makes a random key and that is your whole identity â€” you can back it up and move it to a new phone.</string>
     <string name="community_recover">Restore</string>
     <string name="community_recover_title">Restore your account</string>
     <string name="community_recover_body">Paste the recovery key from your other device. You will find it there under Settings, Services, Community.
@@ -562,21 +562,21 @@ Your comments, ratings and nickname come back with it.</string>
     <string name="community_recover_hint">Recovery key</string>
     <string name="community_recover_action">Restore</string>
     <string name="community_recover_malformed">That is not a recovery key. It is 43 characters, with no spaces.</string>
-    <string name="community_recover_unknown">No account on this server uses that key. Check it for a missing or altered character — a key with a typo is a different key, not a broken one.</string>
+    <string name="community_recover_unknown">No account on this server uses that key. Check it for a missing or altered character â€” a key with a typo is a different key, not a broken one.</string>
     <string name="community_recover_failed">Could not reach the server. Try again in a moment.</string>
     <string name="community_recover_done">Welcome back, %1$s</string>
     <string name="community_intro_optin">Turn it on</string>
     <string name="community_intro_skip">Not now</string>
 
     <string name="community_telemetry_title">Help rank sources</string>
-    <string name="community_telemetry_body">When a source fails, times out, or returns nothing, your app can report that — so everyone\'s search puts the working sources first.\n\nA report says only: which source, whether it worked, and how slow it was. It never contains a manga title, a search you typed, or a page you opened. The identifier rotates every day.</string>
+    <string name="community_telemetry_body">When a source fails, times out, or returns nothing, your app can report that â€” so everyone\'s search puts the working sources first.\n\nA report says only: which source, whether it worked, and how slow it was. It never contains a manga title, a search you typed, or a page you opened. The identifier rotates every day.</string>
     <string name="community_telemetry_yes">Share reliability</string>
     <string name="community_telemetry_no">No</string>
 
     <string name="community_nickname_title">Pick a nickname</string>
     <string name="community_nickname_body">Comments show a nickname of your choosing, followed by four characters that are yours alone. Nobody can take your name, and nobody can pretend to be you.
 
-Optional — skip it and you appear as anon.</string>
+Optional â€” skip it and you appear as anon.</string>
     <string name="community_nickname_preview">You will appear as %1$s</string>
     <string name="community_nickname_continue">Continue</string>
     <string name="community_nickname_back">Back</string>
@@ -659,7 +659,7 @@ Optional — skip it and you appear as anon.</string>
     <string name="default_tab">Default tab</string>
     <string name="mark_as_completed">Mark as completed</string>
     <string name="mark_as_completed_prompt">Mark selected manga as completely read?\n\nWarning: current reading progress will be lost.</string>
-    <string name="category_hidden_done">This category was hidden from the main screen and is accessible through Menu → Manage categories</string>
+    <string name="category_hidden_done">This category was hidden from the main screen and is accessible through Menu â†’ Manage categories</string>
     <string name="remaining_time_pattern" translatable="false">%1$s %2$s</string>
     <string name="volume_">Volume %d</string>
     <string name="volume_unknown">Unknown volume</string>
@@ -728,22 +728,22 @@ Optional — skip it and you appear as anon.</string>
     <string name="handle_remaining_manually_summary">Choose a source separately for each remaining title</string>
     <string name="search_manga_title">Search manga title</string>
     <string name="source_replacement_empty_summary">Change the search title or choose a source to search manually</string>
-    <string name="source_replacement_subtitle">%1$s • %2$s</string>
-    <string name="source_replacement_subtitle_batch">%1$s (%2$d/%3$d) • %4$s</string>
+    <string name="source_replacement_subtitle">%1$s â€¢ %2$s</string>
+    <string name="source_replacement_subtitle_batch">%1$s (%2$d/%3$d) â€¢ %4$s</string>
     <string name="source_selected">Source: %s</string>
     <string name="compare_source_matches">Compare source matches</string>
-    <string name="source_match_rate">%1$s — %2$d/%3$d (%4$d%%)</string>
+    <string name="source_match_rate">%1$s â€” %2$d/%3$d (%4$d%%)</string>
     <string name="source_match_rate_summary">%1$d of %2$d titles matched</string>
     <string name="selected">Selected</string>
     <string name="percent_format" translatable="false">%d%%</string>
-    <string name="source_replacement_step_preparing">Step 1 of 4 · Preparing source comparison…</string>
-    <string name="source_replacement_step_comparing">Step 1 of 4 · Comparing %d titles</string>
-    <string name="source_replacement_step_matching">Step 2 of 4 · Matching %s</string>
-    <string name="source_replacement_step_smart_mix">Step 3 of 4 · Smart mix with %s</string>
-    <string name="source_replacement_step_applying">Step 4 of 4 · Applying matched replacements</string>
-    <string name="source_replacement_remaining_checks">%1$d sources · %2$d checks left</string>
+    <string name="source_replacement_step_preparing">Step 1 of 4 Â· Preparing source comparisonâ€¦</string>
+    <string name="source_replacement_step_comparing">Step 1 of 4 Â· Comparing %d titles</string>
+    <string name="source_replacement_step_matching">Step 2 of 4 Â· Matching %s</string>
+    <string name="source_replacement_step_smart_mix">Step 3 of 4 Â· Smart mix with %s</string>
+    <string name="source_replacement_step_applying">Step 4 of 4 Â· Applying matched replacements</string>
+    <string name="source_replacement_remaining_checks">%1$d sources Â· %2$d checks left</string>
     <string name="source_replacement_remaining_titles">%d titles left</string>
-    <string name="source_replacement_remaining_mix">%1$d ranked sources left · %2$d title checks left</string>
+    <string name="source_replacement_remaining_mix">%1$d ranked sources left Â· %2$d title checks left</string>
     <string name="source_replacement_remaining_replacements">%d replacements left</string>
     <string name="top_source_matches">Top source matches</string>
     <string name="replace_matched">Replace matched</string>
@@ -761,7 +761,7 @@ Optional — skip it and you appear as anon.</string>
     <string name="source_replacement_summary_replaced">Replaced</string>
     <string name="source_replacement_summary_sources">Sources used</string>
     <string name="source_replacement_summary_mix">Replacement mix</string>
-    <string name="source_replacement_summary_source_item">%1$s · %2$d</string>
+    <string name="source_replacement_summary_source_item">%1$s Â· %2$d</string>
     <string name="migrate">Migrate</string>
     <string name="migrate_confirmation">Manga \"%1$s\" from \"%2$s\" will be replaced with \"%3$s\" from \"%4$s\" in your history and favorites (if present)</string>
     <string name="manga_migration">Manga migration</string>
@@ -1125,7 +1125,7 @@ Optional — skip it and you appear as anon.</string>
 
 	<string name="community_comment_hint">Add a comment</string>
 	<string name="community_comment_spoiler">Spoiler</string>
-	<string name="community_comment_spoiler_hidden">Spoiler — tap to show</string>
+	<string name="community_comment_spoiler_hidden">Spoiler â€” tap to show</string>
 	<string name="community_comment_send">Send</string>
 	<string name="community_comment_reply">Reply</string>
 	<string name="community_comment_edit">Edit</string>
@@ -1184,7 +1184,7 @@ Optional — skip it and you appear as anon.</string>
     <string name="no_repositories">No repositories yet. Add one to see its sources.</string>
     <string name="plugin_installed">Installed</string>
     <string name="plugin_update_available">Update available</string>
-    <string name="plugin_download_started">Downloading…</string>
+    <string name="plugin_download_started">Downloadingâ€¦</string>
     <string name="plugin_verify_failed">Download did not match the repository checksum and was not installed.</string>
     <string name="plugin_up_to_date">Already up to date</string>
     <string name="content_type">Content type</string>
@@ -1197,10 +1197,10 @@ Optional — skip it and you appear as anon.</string>
     <string name="media_reader_no_streams">This episode did not return a playable video stream.</string>
     <string name="media_reader_decrease_text">Decrease text size</string>
     <string name="media_reader_increase_text">Increase text size</string>
-    <string name="media_reader_decrease_text_short" translatable="false">A−</string>
+    <string name="media_reader_decrease_text_short" translatable="false">Aâˆ’</string>
     <string name="media_reader_increase_text_short" translatable="false">A+</string>
-    <string name="media_reader_previous_short" translatable="false">‹</string>
-    <string name="media_reader_next_short" translatable="false">›</string>
+    <string name="media_reader_previous_short" translatable="false">â€¹</string>
+    <string name="media_reader_next_short" translatable="false">â€º</string>
     <string name="js_source_installed">Source installed</string>
     <string name="js_source_remove_confirm">Remove this source?</string>
     <string name="js_source_no_preferences">This source does not expose any configurable settings.</string>

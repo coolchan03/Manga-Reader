@@ -1180,6 +1180,14 @@ Optional â€” skip it and you appear as anon.</string>
     <string name="add_repository">Add repository</string>
     <string name="repository_url_hint">https://example.com/index.json</string>
     <string name="repository_invalid_url">Enter a valid https:// address</string>
+    <string name="repository_preview_title">Add this repository?</string>
+    <string name="repository_preview_url">Repository: %1$s</string>
+    <string name="repository_preview_counts">%1$d compatible JavaScript sources, %2$d APK sources</string>
+    <string name="repository_preview_skipped">%1$d Dart sources are unsupported here and will be skipped.</string>
+    <string name="repository_preview_contains">Includes:</string>
+    <string name="repository_preview_more">and %1$d more</string>
+    <string name="repository_trust_warning">Repository extensions can run code inside the app and make network requests. Only add repositories you trust.</string>
+    <string name="repository_verify_failed">Could not verify this repository: %1$s</string>
     <string name="remove_repository_confirm">Remove this repository?</string>
     <string name="no_repositories">No repositories yet. Add one to see its sources.</string>
     <string name="plugin_installed">Installed</string>

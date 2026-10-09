@@ -10,9 +10,12 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.jsext.repo.JsSourceEntry
 import org.koitharu.kotatsu.sourcerepo.domain.JsSourceItem
+import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.sourcerepo.domain.PluginEntry
 import org.koitharu.kotatsu.sourcerepo.domain.RepoPlugin
+import org.koitharu.kotatsu.sourcerepo.domain.RepoPreview
 import org.koitharu.kotatsu.sourcerepo.domain.SourceRepoRepository
+import org.koitharu.kotatsu.sourcerepo.domain.normalizeRepoUrl
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
@@ -37,6 +40,12 @@ class SourceReposViewModel @Inject constructor(
 	/** A string resource to show as a toast. */
 	val onMessage = MutableEventFlow<Int>()
 
+	/** A repository was fetched successfully and is ready for an explicit trust confirmation. */
+	val onRepoPreview = MutableEventFlow<RepoPreview>()
+
+	/** Repository verification failed before anything was saved. */
+	val onRepoPreviewError = MutableEventFlow<Throwable>()
+
 	private val pending = ConcurrentHashMap<Long, RepoPlugin>()
 
 	init {
@@ -57,12 +66,21 @@ class SourceReposViewModel @Inject constructor(
 	}
 
 	/** @return `false` if [url] is not a valid https URL. */
-	fun addRepo(url: String): Boolean {
-		if (!repository.addRepo(url)) {
-			return false
+	fun previewRepo(url: String): Boolean {
+		val normalized = normalizeRepoUrl(url) ?: return false
+		launchLoadingJob(Dispatchers.Default) {
+			runCatchingCancellable { repository.previewRepo(normalized) }
+				.onSuccess { preview -> if (preview != null) onRepoPreview.call(preview) }
+				.onFailure { onRepoPreviewError.call(it) }
 		}
-		refresh()
 		return true
+	}
+
+	/** Saves only a repository that has already passed [previewRepo]. */
+	fun addRepo(url: String) {
+		if (repository.addRepo(url)) {
+			refresh()
+		}
 	}
 
 	fun removeRepo(url: String) {

@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-10-08T10:41:41Z",
+  "checkedAt": "2026-10-09T02:20:00Z",
   "upstreams": {
     "Kotatsu-Redo/Kotatsu-Redo": {
       "ref": "devel",
@@ -13,8 +13,8 @@
     },
     "kodjodevf/mangayomi": {
       "ref": "main",
-      "sha": "5170ad0fdd15c552aca24d4e7f7416421a13ff0c",
-      "note": "Port only relevant source/runtime/reader fixes; do not merge Flutter-specific code."
+      "sha": "fc5c4e91ab90646e2c5f0a4f4c0d517441ce24c0",
+      "note": "Ported the relevant repository-trust and request-header redaction ideas; tracker-cache and Flutter-only changes do not map to this Android/Kotlin architecture."
     },
     "m2k3a/mangayomi-extensions": {
       "ref": "main",

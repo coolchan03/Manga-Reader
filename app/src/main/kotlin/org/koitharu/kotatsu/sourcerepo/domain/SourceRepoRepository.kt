@@ -42,6 +42,14 @@ data class RepoFetchResult(
 	val errors: Map<String, Throwable>,
 )
 
+/** Safe, non-persistent inspection of a repository before the user decides to trust it. */
+data class RepoPreview(
+	val url: String,
+	val pluginNames: List<String>,
+	val jsSourceNames: List<String>,
+	val skippedDartCount: Int,
+)
+
 private const val MAX_SOURCE_BYTES = 2L * 1024 * 1024
 
 @Singleton
@@ -57,6 +65,22 @@ class SourceRepoRepository @Inject constructor(
 	fun addRepo(url: String): Boolean = store.add(url)
 
 	fun removeRepo(url: String) = store.remove(url)
+
+	/**
+	 * Fetches and parses a repository without saving it. This keeps a bad or spoofed URL out of
+	 * persistent settings until the user has seen what the repository actually advertises.
+	 */
+	suspend fun previewRepo(url: String): RepoPreview? = withContext(Dispatchers.IO) {
+		val normalized = normalizeRepoUrl(url) ?: return@withContext null
+		val index = fetchIndex(normalized)
+		val runnableJs = index.jsSources.filter { it.isRunnable }
+		RepoPreview(
+			url = normalized,
+			pluginNames = index.plugins.map { it.name }.distinct().sortedBy { it.lowercase() },
+			jsSourceNames = runnableJs.map { it.name }.distinct().sortedBy { it.lowercase() },
+			skippedDartCount = index.jsSources.size - runnableJs.size,
+		)
+	}
 
 	suspend fun fetchAll(): RepoFetchResult = withContext(Dispatchers.IO) {
 		val plugins = ArrayList<RepoPlugin>()

@@ -46,6 +46,7 @@ import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.sourcerepo.domain.JsSourceItem
 import org.koitharu.kotatsu.sourcerepo.domain.PluginEntry
 import org.koitharu.kotatsu.sourcerepo.domain.PluginState
+import org.koitharu.kotatsu.sourcerepo.domain.RepoPreview
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -75,6 +76,14 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 		viewModel.onInstall.observeEvent(viewLifecycleOwner) { startActivity(it) }
 		viewModel.onMessage.observeEvent(viewLifecycleOwner) {
 			Toast.makeText(requireContext(), it, Toast.LENGTH_SHORT).show()
+		}
+		viewModel.onRepoPreview.observeEvent(viewLifecycleOwner, ::showRepoPreview)
+		viewModel.onRepoPreviewError.observeEvent(viewLifecycleOwner) {
+			Toast.makeText(
+				requireContext(),
+				getString(R.string.repository_verify_failed, it.getDisplayMessage(resources)),
+				Toast.LENGTH_LONG,
+			).show()
 		}
 	}
 
@@ -440,10 +449,46 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 			.setView(container)
 			.setNegativeButton(android.R.string.cancel, null)
 			.setPositiveButton(R.string.add) { _, _ ->
-				if (!viewModel.addRepo(input.text.toString())) {
+				if (!viewModel.previewRepo(input.text.toString())) {
 					Toast.makeText(context, R.string.repository_invalid_url, Toast.LENGTH_SHORT).show()
 				}
 			}
+			.show()
+	}
+
+	private fun showRepoPreview(preview: RepoPreview) {
+		val context = requireContext()
+		val names = (preview.jsSourceNames + preview.pluginNames).distinct()
+		val shown = names.take(12)
+		val remaining = names.size - shown.size
+		val message = buildString {
+			append(getString(R.string.repository_preview_url, preview.url))
+			append("\n\n")
+			append(getString(R.string.repository_preview_counts, preview.jsSourceNames.size, preview.pluginNames.size))
+			if (preview.skippedDartCount > 0) {
+				append("\n")
+				append(getString(R.string.repository_preview_skipped, preview.skippedDartCount))
+			}
+			if (shown.isNotEmpty()) {
+				append("\n\n")
+				append(getString(R.string.repository_preview_contains))
+				for (name in shown) append("\n- ").append(name)
+				if (remaining > 0) append("\n").append(getString(R.string.repository_preview_more, remaining))
+			}
+			append("\n\n")
+			append(getString(R.string.repository_trust_warning))
+		}
+		val padding = resources.getDimensionPixelSize(R.dimen.margin_normal)
+		val body = TextView(context).apply {
+			text = message
+			setPadding(padding, padding / 2, padding, padding / 2)
+		}
+		val scroll = ScrollView(context).apply { addView(body) }
+		MaterialAlertDialogBuilder(context)
+			.setTitle(R.string.repository_preview_title)
+			.setView(scroll)
+			.setNegativeButton(android.R.string.cancel, null)
+			.setPositiveButton(R.string.add) { _, _ -> viewModel.addRepo(preview.url) }
 			.show()
 	}
 

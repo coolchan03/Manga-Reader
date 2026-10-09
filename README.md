@@ -1,3 +1,5 @@
+![Monogatari](docs/monogatari-banner.svg)
+
 # Monogatari (物語)
 
 **Manga · Novels · Anime — A World of Stories in One Place**

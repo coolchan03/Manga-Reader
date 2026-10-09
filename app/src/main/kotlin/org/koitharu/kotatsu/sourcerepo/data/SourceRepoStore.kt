@@ -18,7 +18,8 @@ class SourceRepoStore @Inject constructor(
 
 	private val prefs = context.getSharedPreferences("source_repos", Context.MODE_PRIVATE)
 
-	fun getAll(): List<String> = prefs.getStringSet(KEY_URLS, null).orEmpty().sorted()
+	/** Seed compatible JS indexes once; never re-add a repo after the user removes it. */
+	fun getAll(): List<String> = (prefs.getStringSet(KEY_URLS, null) ?: DEFAULT_REPOS).sorted()
 
 	/** @return `false` if [url] is not a valid https URL. Adding an existing one is a no-op success. */
 	fun add(url: String): Boolean {
@@ -34,5 +35,10 @@ class SourceRepoStore @Inject constructor(
 	private companion object {
 
 		const val KEY_URLS = "urls"
+		val DEFAULT_REPOS = setOf(
+			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/index.json",
+			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/novel_index.json",
+			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/anime_index.json",
+		)
 	}
 }

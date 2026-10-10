@@ -206,7 +206,7 @@ class SourceReposFragment : BasePreferenceFragment(R.string.source_repos) {
 			PluginState.INSTALLED -> getString(R.string.plugin_installed)
 			PluginState.UPDATE_AVAILABLE -> getString(R.string.plugin_update_available)
 		}
-		return listOfNotNull("v${e.version}", e.lang.takeIf { it.isNotEmpty() }, type, status).joinToString(" · ")
+		return listOfNotNull("v${e.version}", e.lang.takeIf { it.isNotEmpty() }, type, status, "Site availability not verified").joinToString(" · ")
 	}
 
 	private fun onJsSourceClick(item: JsSourceItem) {

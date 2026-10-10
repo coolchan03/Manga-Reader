@@ -36,6 +36,9 @@ class SourceRepoStore @Inject constructor(
 
 		const val KEY_URLS = "urls"
 		val DEFAULT_REPOS = setOf(
+			"https://raw.githubusercontent.com/m2k3a/mangayomi-extensions/main/index.json",
+			"https://raw.githubusercontent.com/m2k3a/mangayomi-extensions/main/novel_index.json",
+			"https://raw.githubusercontent.com/m2k3a/mangayomi-extensions/main/anime_index.json",
 			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/index.json",
 			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/novel_index.json",
 			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/anime_index.json",

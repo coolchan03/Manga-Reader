@@ -94,13 +94,17 @@ class SourceRepoRepository @Inject constructor(
 				}
 				.onFailure { errors[url] = it }
 		}
-		val newestJs = jsEntries.groupBy { it.id }
-			.map { (_, group) -> group.reduce { a, b -> if (compareVersions(b.version, a.version) > 0) b else a } }
-		val runnable = newestJs.filter { it.isRunnable }.sortedBy { it.name.lowercase() }
+		val groupedSources = jsEntries.groupBy { it.id }
+		// A newer Dart entry must not hide a runnable JavaScript implementation of the same
+		// source advertised by another repository. Choose the newest JavaScript version first.
+		val runnable = groupedSources.values.mapNotNull { group ->
+			group.filter { it.isRunnable }
+				.maxWithOrNull { a, b -> compareVersions(a.version, b.version) }
+		}.sortedBy { it.name.lowercase() }
 		RepoFetchResult(
 			plugins = plugins.mergeNewest().map { PluginEntry(it, it.stateFor(installedVersionCode(it.packageName))) },
 			jsSources = runnable.map { JsSourceItem(it, jsStateOf(it)) },
-			skippedDartCount = newestJs.size - runnable.size,
+			skippedDartCount = groupedSources.size - runnable.size,
 			errors = errors,
 		)
 	}

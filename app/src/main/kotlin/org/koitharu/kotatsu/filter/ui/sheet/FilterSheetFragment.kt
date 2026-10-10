@@ -413,9 +413,14 @@ class FilterSheetFragment : BaseAdaptiveSheet<SheetFilterBinding>(),
         b.chipsDemographics.setChips(chips)
     }
 
+    private fun updateYearHint(b: SheetFilterBinding) {
+        b.textYearUnsupported.isVisible = b.layoutYear.isGone && b.layoutYearsRange.isGone
+    }
+
     private fun onYearChanged(value: FilterProperty<Int>) {
         val b = viewBinding ?: return
         b.layoutYear.isGone = value.isEmpty()
+        updateYearHint(b)
         if (value.isEmpty()) {
             return
         }
@@ -435,6 +440,7 @@ class FilterSheetFragment : BaseAdaptiveSheet<SheetFilterBinding>(),
     private fun onYearRangeChanged(value: FilterProperty<Int>) {
         val b = viewBinding ?: return
         b.layoutYearsRange.isGone = value.isEmpty()
+        updateYearHint(b)
         if (value.isEmpty()) {
             return
         }

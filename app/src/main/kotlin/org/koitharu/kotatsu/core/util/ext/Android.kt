@@ -1,6 +1,7 @@
 package org.koitharu.kotatsu.core.util.ext
 
 import android.Manifest
+import android.animation.ValueAnimator
 import android.app.Activity
 import android.app.ActivityManager
 import android.app.ActivityManager.MemoryInfo
@@ -23,8 +24,11 @@ import android.net.ConnectivityManager
 import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
+import android.view.View
+import android.view.ViewGroup
 import android.view.ViewPropertyAnimator
 import android.webkit.CookieManager
+import android.webkit.WebSettings
 import android.webkit.WebView
 import androidx.activity.result.ActivityResultLauncher
 import androidx.annotation.CheckResult
@@ -121,6 +125,10 @@ fun ViewPropertyAnimator.applySystemAnimatorScale(context: Context): ViewPropert
 	this.duration = (this.duration * context.animatorDurationScale).toLong()
 }
 
+fun ValueAnimator.applySystemAnimatorScale(context: Context): ValueAnimator = apply {
+	this.duration = (this.duration * context.animatorDurationScale).toLong()
+}
+
 fun Context.getAnimationDuration(@IntegerRes resId: Int): Long {
 	return (resources.getInteger(resId) * animatorDurationScale).roundToLong()
 }
@@ -210,6 +218,9 @@ fun Context.ensureRamAtLeast(requiredSize: Long) {
 fun WebView.configureForParser(userAgentOverride: String?) = with(settings) {
 	javaScriptEnabled = true
 	domStorageEnabled = true
+	useWideViewPort = true
+	loadWithOverviewMode = true
+	cacheMode = WebSettings.LOAD_DEFAULT
 	mediaPlaybackRequiresUserGesture = false
 	if (WebViewFeature.isFeatureSupported(WebViewFeature.MUTE_AUDIO)) {
 		WebViewCompat.setAudioMuted(this@configureForParser, true)
@@ -222,6 +233,18 @@ fun WebView.configureForParser(userAgentOverride: String?) = with(settings) {
 	val cookieManager = CookieManager.getInstance()
 	cookieManager.setAcceptCookie(true)
 	cookieManager.setAcceptThirdPartyCookies(this@configureForParser, true)
+}
+
+fun WebView.prepareDetachedParserViewport() {
+	if (width > 0 && height > 0) {
+		return
+	}
+	layoutParams = ViewGroup.LayoutParams(1080, 1920)
+	measure(
+		View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+		View.MeasureSpec.makeMeasureSpec(1920, View.MeasureSpec.EXACTLY),
+	)
+	layout(0, 0, 1080, 1920)
 }
 
 fun Context.restartApplication() {

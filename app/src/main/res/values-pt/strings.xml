@@ -708,7 +708,7 @@
     <string name="debug">Depurar</string>
     <string name="source_code">Código fonte</string>
     <string name="user_manual">Manual do usuário</string>
-    <string name="telegram_group">Grupo Telegram</string>
+    <string name="telegram_group">Grupo Discord</string>
     <string name="content_type_image_set">Conjunto de imagens</string>
     <string name="content_type_game_cg">Jogo CG</string>
     <string name="sfw">sfw</string>
@@ -791,9 +791,7 @@
     <string name="clear_browser_data_summary">Limpar informações do browser como cache e cookies. Aviso: Autorizações em fontes de mangá podem ficar inválidas</string>
     <string name="no_write_permission_to_file">Não há permissão para modificar um ficheiro</string>
     <string name="include_disabled_sources">Incluir fontes desabilitadas</string>
-    <string name="suggestions_disabled_sources_summary">Mostrar sugestões de todas as fontes de mangá, incluindo as desabilitadas</string>
-    <string name="tags_warnings">Destacar géneros perigosos</string>
-    <string name="tags_warnings_summary">Destacar géneros que podem ser inapropriados para a maioria dos utilizadores</string>
+    <string name="suggestions_disabled_sources_summary">Mostrar sugestões de todas as fontes de mangá, incluindo as desabilitadas</string>>
     <string name="manga_override_hint">Estás mudanças vão afetar como mangá é apresentado na aplicação</string>
     <string name="use_default_cover">Usar capa padrão</string>
     <string name="pick_manga_page">Escolher página do mangá</string>
@@ -822,8 +820,6 @@
     <string name="error_non_file_uri">O caminho escolhido não pode ser usado porque não indica um ficheiro ou diretório</string>
     <string name="collapse">Recolher</string>
     <string name="expand">Expandir</string>
-    <string name="adblock">Bloquear anúncios no navegador</string>
-    <string name="adblock_summary">Bloquear anúncios no navegador integrado (beta)</string>
     <string name="collapse_long_description">Recolher descrição longa</string>
     <string name="creating_backup">Criando backup</string>
     <string name="share_backup">Compartilhar backup</string>

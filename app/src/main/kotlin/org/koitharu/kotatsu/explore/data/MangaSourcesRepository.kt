@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import org.koitharu.kotatsu.BuildConfig
@@ -25,6 +26,8 @@ import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.model.isNsfw
 import org.koitharu.kotatsu.core.parser.external.ExternalMangaSource
+import org.koitharu.kotatsu.jsext.repo.JsSourceStore
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.core.prefs.AppSettings
 import org.koitharu.kotatsu.core.prefs.observeAsFlow
 import org.koitharu.kotatsu.core.ui.util.ReversibleHandle
@@ -34,7 +37,9 @@ import org.koitharu.kotatsu.parsers.model.MangaParserSource
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.parsers.network.CloudFlareHelper
 import org.koitharu.kotatsu.parsers.util.mapNotNullToSet
+import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.parsers.util.mapToSet
+import org.koitharu.kotatsu.sourcescore.domain.SourceRanker
 import java.util.Collections
 import java.util.EnumSet
 import java.util.concurrent.atomic.AtomicBoolean
@@ -46,6 +51,14 @@ class MangaSourcesRepository @Inject constructor(
 	@LocalizedAppContext private val context: Context,
 	private val db: MangaDatabase,
 	private val settings: AppSettings,
+	/**
+	 * Nullable with a default so [org.koitharu.kotatsu.backups.domain.AppBackupAgent] can keep
+	 * constructing this by hand: a backup agent runs in its own process with no Hilt graph, and it
+	 * has no use for score ordering. Dagger ignores the default and injects the real instance.
+	 */
+	private val sourceRanker: SourceRanker? = null,
+	/** Nullable for the same reason as [sourceRanker]. */
+	private val jsStore: JsSourceStore? = null,
 ) {
 
 	private val isNewSourcesAssimilated = AtomicBoolean(false)
@@ -66,6 +79,7 @@ class MangaSourcesRepository @Inject constructor(
 				val external = getExternalSources()
 				val list = ArrayList<MangaSourceInfo>(enabled.size + external.size)
 				external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+				getJsSources().mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
 				list.addAll(enabled)
 				list
 			}
@@ -74,9 +88,14 @@ class MangaSourcesRepository @Inject constructor(
 	suspend fun getPinnedSources(): Set<MangaSource> {
 		assimilateNewSources()
 		val skipNsfw = settings.isNsfwContentDisabled
-		return dao.findAllPinned().mapNotNullToSet {
+		val result = dao.findAllPinned().mapNotNullTo(LinkedHashSet<MangaSource>()) {
 			it.source.toMangaSourceOrNull()?.takeUnless { x -> skipNsfw && x.isNsfw() }
 		}
+		// Installed external/JS sources are intentionally always enabled and displayed as pinned.
+		// Pinned-only search must therefore include them too.
+		getExternalSources().filterTo(result) { !skipNsfw || !it.isNsfw() }
+		result.addAll(getJsSources())
+		return result
 	}
 
 	suspend fun getTopSources(limit: Int): List<MangaSource> {
@@ -174,8 +193,11 @@ class MangaSourcesRepository @Inject constructor(
 		observeAllEnabled(),
 		observeSortOrder(),
 	) { skipNsfw, allEnabled, order ->
-		dao.observeAll(!allEnabled, order).map {
-			it.toSources(skipNsfw, order)
+		// Re-emits when a score download lands, so the order and the flames update without waiting
+		// for the sources table to change. Local stats are left out on purpose: they change on every
+		// search, and the list reshuffling under the user's finger would be worse than slightly stale.
+		combine(dao.observeAll(!allEnabled, order), observeScoreUpdates()) { entities, _ -> entities }.map {
+			it.toSources(skipNsfw, order).sortedByScoreIfNeeded(order)
 		}
 	}.flattenLatest()
 		.onStart { assimilateNewSources() }
@@ -184,6 +206,11 @@ class MangaSourcesRepository @Inject constructor(
 			external.mapTo(list) { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
 			list.addAll(enabled)
 			list
+		}
+		.combine(jsStore?.changes ?: flowOf(0)) { sources, _ ->
+			val js = getJsSources().map { MangaSourceInfo(it, isEnabled = true, isPinned = true) }
+			// like external sources: installed means enabled, and they sit at the top
+			js + sources
 		}
 
 	fun observeAll(): Flow<List<Pair<MangaSource, Boolean>>> = dao.observeAll().map { entities ->
@@ -353,6 +380,70 @@ class MangaSourcesRepository @Inject constructor(
 			.conflate()
 	}
 
+	/** Installed Mangayomi JS sources. Installing one is what enables it; NSFW ones honour the NSFW setting. */
+	fun getJsSources(): List<JsMangaSource> {
+		val skipNsfw = settings.isNsfwContentDisabled
+		return jsStore?.list().orEmpty()
+			.filter { !(skipNsfw && it.isNsfw) }
+			.map { JsMangaSource(it.id) }
+	}
+
+	/** Language chips used when creating a source preset, including installed JS sources. */
+	fun getPresetLanguages(): Set<String> = buildSet {
+		allMangaSources.mapNotNullTo(this) { source -> source.locale.takeIf { it.isNotEmpty() } }
+		val skipNsfw = settings.isNsfwContentDisabled
+		jsStore?.list().orEmpty().forEach { entry ->
+			if (!(skipNsfw && entry.isNsfw) && entry.lang.isNotBlank() && entry.lang != "all") {
+				add(entry.lang)
+			}
+		}
+	}
+
+	/** Source names a language-based preset should contain. `all` JS sources apply to every language. */
+	fun getSourceNamesForPresetLanguages(languages: Set<String>): Set<String> {
+		if (languages.isEmpty()) return emptySet()
+		val skipNsfw = settings.isNsfwContentDisabled
+		return buildSet {
+			allMangaSources.forEach { source ->
+				if (source.locale in languages && (!skipNsfw || !source.isNsfw())) add(source.name)
+			}
+			jsStore?.list().orEmpty().forEach { entry ->
+				if (!(skipNsfw && entry.isNsfw) && (entry.lang == "all" || entry.lang in languages)) {
+					add(JsMangaSource(entry.id).name)
+				}
+			}
+		}
+	}
+
+	/** Resolve a preset's persisted source names across built-in, external and JS source types. */
+	fun getSourcesByNames(names: Set<String>): List<MangaSource> {
+		if (names.isEmpty()) return emptyList()
+		val skipNsfw = settings.isNsfwContentDisabled
+		return buildList {
+			allMangaSources.forEach { source ->
+				if (source.name in names && (!skipNsfw || !source.isNsfw())) add(source)
+			}
+			getExternalSources().forEach { source ->
+				if (source.name in names && (!skipNsfw || !source.isNsfw())) add(source)
+			}
+			getJsSources().forEach { source -> if (source.name in names) add(source) }
+		}
+	}
+
+	/** Preset sources for Explore, preserving pin semantics for built-ins and always-pinned add-ons. */
+	suspend fun getPresetSourceInfo(names: Set<String>): List<MangaSourceInfo> {
+		if (names.isEmpty()) return emptyList()
+		assimilateNewSources()
+		val pinnedNames = dao.findAllPinned().mapTo(HashSet()) { it.source }
+		return getSourcesByNames(names).map { source ->
+			MangaSourceInfo(
+				mangaSource = source,
+				isEnabled = true,
+				isPinned = source !is MangaParserSource || source.name in pinnedNames,
+			)
+		}
+	}
+
 	fun getExternalSources(): List<ExternalMangaSource> = context.packageManager.queryIntentContentProviders(
 		Intent("app.kotatsu.parser.PROVIDE_MANGA"), 0,
 	).map { resolveInfo ->
@@ -388,6 +479,50 @@ class MangaSourcesRepository @Inject constructor(
 		}
 		return result
 	}
+
+	/**
+	 * Orders a list that did not come from the sources table - a preset's sources - the way the
+	 * enabled list is ordered for the user's chosen [SourcesSortOrder]. Without this a preset showed
+	 * sources in registry order whatever the setting said, flames and all but never popular-first.
+	 * Manual and last-used orders have no meaning outside the table, so those keep the given order.
+	 */
+	suspend fun sortForDisplay(sources: List<MangaSourceInfo>, order: SourcesSortOrder): List<MangaSourceInfo> =
+		when (order) {
+			SourcesSortOrder.ALPHABETIC -> sources.sortedWith(
+				compareBy<MangaSourceInfo> { !it.isPinned }.thenBy { it.getTitle(context) },
+			)
+
+			else -> sources.sortedByScoreIfNeeded(order)
+		}
+
+	/** Emits the current sort order, then again whenever the user changes it. */
+	fun observeSourcesSortOrder(): Flow<SourcesSortOrder> = observeSortOrder()
+
+	/**
+	 * Applies [SourcesSortOrder.SCORE], which cannot be expressed as an ORDER BY because the community
+	 * scores live in a separate Room database (kept apart so upstream Kotatsu's migrations never
+	 * collide with this fork's).
+	 *
+	 * Pinned sources stay on top regardless: pinning is an explicit user choice and outranks anything
+	 * a score has to say. The really popular (flame-marked) sources come straight after them.
+	 */
+	private suspend fun List<MangaSourceInfo>.sortedByScoreIfNeeded(
+		order: SourcesSortOrder?,
+	): List<MangaSourceInfo> {
+		if (order?.isExternallyRanked != true || isEmpty()) return this
+		val ranker = sourceRanker ?: return this
+		val snapshot = runCatchingCancellable { ranker.snapshot() }.getOrNull() ?: return this
+		val ranks = associate { it.name to snapshot.rank(it.mangaSource) }
+		return sortedWith(
+			compareBy<MangaSourceInfo> { !it.isPinned }
+				.thenByDescending { ranks.getValue(it.name).isHot }
+				.thenByDescending { ranks.getValue(it.name).composite },
+		)
+	}
+
+	/** Emits once at start and again whenever downloaded community scores change. */
+	fun observeScoreUpdates(): Flow<Unit> =
+		sourceRanker?.observeScores()?.map { } ?: flowOf(Unit)
 
 	private fun observeIsNsfwDisabled() = settings.observeAsFlow(AppSettings.KEY_DISABLE_NSFW) {
 		isNsfwContentDisabled

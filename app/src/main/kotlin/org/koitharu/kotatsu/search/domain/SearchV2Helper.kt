@@ -16,6 +16,8 @@ import org.koitharu.kotatsu.parsers.model.SortOrder
 import org.koitharu.kotatsu.parsers.util.almostEquals
 import org.koitharu.kotatsu.parsers.util.levenshteinDistance
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
+import org.koitharu.kotatsu.sourcescore.domain.ProbeOp
+import org.koitharu.kotatsu.sourcescore.domain.SourceProbeRecorder
 
 private const val MATCH_THRESHOLD_DEFAULT = 0.2f
 
@@ -24,16 +26,32 @@ class SearchV2Helper @AssistedInject constructor(
 	private val mangaRepositoryFactory: MangaRepository.Factory,
 	private val dataRepository: MangaDataRepository,
 	private val settings: AppSettings,
+	private val probeRecorder: SourceProbeRecorder,
 ) {
 
-	suspend operator fun invoke(query: String, kind: SearchKind): SearchResults? {
+	suspend operator fun invoke(
+		query: String,
+		kind: SearchKind,
+		yearFrom: Int? = null,
+		yearTo: Int? = null,
+	): SearchResults? {
 		if (settings.isNsfwContentDisabled && source.isNsfw()) {
 			return null
 		}
 		val repository = mangaRepositoryFactory.create(source)
-		val listFilter = repository.getFilter(query, kind) ?: return null
+		val listFilter = repository.getFilter(query, kind, yearFrom, yearTo) ?: return null
 		val sortOrder = repository.getSortOrder(kind)
-		val list = repository.getList(0, sortOrder, listFilter)
+		// The one choke point every per-source search passes through, which is why the probe lives
+		// here instead of being scattered across call sites. An empty result is recorded as a success
+		// that returned nothing: a broken parser answers 200 OK with zero items, and without that
+		// distinction it would look perfectly healthy forever.
+		val list = probeRecorder.measure(
+			source = source,
+			op = ProbeOp.SEARCH,
+			isEmpty = { it.isEmpty() },
+		) {
+			repository.getList(0, sortOrder, listFilter)
+		}
 		if (list.isEmpty()) {
 			return null
 		}
@@ -43,7 +61,13 @@ class SearchV2Helper @AssistedInject constructor(
 		return SearchResults(listFilter = listFilter, sortOrder = sortOrder, manga = result)
 	}
 
-	private suspend fun MangaRepository.getFilter(query: String, kind: SearchKind): MangaListFilter? = when (kind) {
+	private suspend fun MangaRepository.getFilter(
+		query: String,
+		kind: SearchKind,
+		yearFrom: Int?,
+		yearTo: Int?,
+	): MangaListFilter? {
+		val base = when (kind) {
 		SearchKind.SIMPLE,
 		SearchKind.TITLE -> if (filterCapabilities.isSearchSupported) {
 			MangaListFilter(query = query)
@@ -65,12 +89,22 @@ class SearchV2Helper @AssistedInject constructor(
 			}.onFailure { e ->
 				e.printStackTraceDebug()
 			}.getOrDefault(emptySet())
-			val tag = tags.find { x -> x.title.equals(query, ignoreCase = true) }
-			if (tag != null) {
-				MangaListFilter(tags = setOf(tag))
-			} else {
-				null
-			}
+			val wanted = query.normalizedTag()
+			val tag = tags.find { x -> x.title.normalizedTag() == wanted }
+			if (tag != null) MangaListFilter(tags = setOf(tag)) else null
+		}
+		}
+		base ?: return null
+		if (yearFrom == null && yearTo == null) return base
+		// A global date filter must be truthful. If a source cannot combine text search with its
+		// year filter, skip it instead of showing unfiltered results under a filtered heading.
+		if (!filterCapabilities.isSearchWithFiltersSupported) return null
+		val from = yearFrom ?: yearTo ?: return base
+		val to = yearTo ?: yearFrom ?: return base
+		return when {
+			filterCapabilities.isYearRangeSupported -> base.copy(yearFrom = minOf(from, to), yearTo = maxOf(from, to))
+			filterCapabilities.isYearSupported && from == to -> base.copy(year = from)
+			else -> null
 		}
 	}
 
@@ -104,7 +138,7 @@ class SearchV2Helper @AssistedInject constructor(
 			}
 
 			SearchKind.TAG -> sortByDescending { m ->
-				m.tags.any { tag -> tag.title.equals(query, ignoreCase = true) }
+				m.tags.any { tag -> tag.title.normalizedTag() == query.normalizedTag() }
 			}
 		}
 	}
@@ -124,6 +158,9 @@ class SearchV2Helper @AssistedInject constructor(
 		}
 	}
 
+
+	/** Lowercases and drops spaces/punctuation so "Slice of Life" matches "slice-of-life". */
+	private fun String.normalizedTag(): String = lowercase().filter { it.isLetterOrDigit() }
 
 	private fun Manga.matches(query: String, threshold: Float): Boolean {
 		return matchesTitles(title, query, threshold) || matchesTitles(altTitle, query, threshold)

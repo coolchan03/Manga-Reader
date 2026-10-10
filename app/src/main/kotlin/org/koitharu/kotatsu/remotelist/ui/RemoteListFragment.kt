@@ -11,6 +11,7 @@ import com.google.android.material.snackbar.Snackbar
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.launch
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.model.getTitle
 import org.koitharu.kotatsu.core.nav.router
@@ -21,12 +22,14 @@ import org.koitharu.kotatsu.core.util.ext.getCauseUrl
 import org.koitharu.kotatsu.core.util.ext.isHttpUrl
 import org.koitharu.kotatsu.core.util.ext.observe
 import org.koitharu.kotatsu.core.util.ext.observeEvent
+import org.koitharu.kotatsu.core.util.ext.viewLifecycleScope
 import org.koitharu.kotatsu.core.util.ext.withArgs
 import org.koitharu.kotatsu.databinding.FragmentListBinding
 import org.koitharu.kotatsu.filter.ui.FilterCoordinator
 import org.koitharu.kotatsu.list.ui.MangaListFragment
 import org.koitharu.kotatsu.parsers.model.MangaSource
 import org.koitharu.kotatsu.search.domain.SearchKind
+import org.koitharu.kotatsu.search.ui.MangaListActivity
 
 @AndroidEntryPoint
 class RemoteListFragment : MangaListFragment(), FilterCoordinator.Owner, View.OnClickListener {
@@ -39,10 +42,26 @@ class RemoteListFragment : MangaListFragment(), FilterCoordinator.Owner, View.On
     override fun onViewBindingCreated(binding: FragmentListBinding, savedInstanceState: Bundle?) {
         super.onViewBindingCreated(binding, savedInstanceState)
         addMenuProvider(RemoteListMenuProvider())
-        addMenuProvider(MangaSearchMenuProvider(filterCoordinator, viewModel))
+        addMenuProvider(
+            MangaSearchMenuProvider(filterCoordinator, viewModel) { isSearchMode ->
+                (activity as? MangaListActivity)?.setFilterHeaderVisible(!isSearchMode)
+            },
+        )
         viewModel.isRandomLoading.observe(viewLifecycleOwner, MenuInvalidator(requireActivity()))
         viewModel.onOpenManga.observeEvent(viewLifecycleOwner) { router.openDetails(it) }
         viewModel.onSourceBroken.observeEvent(viewLifecycleOwner) { showSourceBrokenWarning() }
+        viewModel.onCaptchaRequired.observeEvent(viewLifecycleOwner) { e ->
+            viewLifecycleScope.launch {
+                viewModel.setCaptchaResolving(true)
+                try {
+                    if (exceptionResolver.resolve(e, tryAutoResolve = true)) {
+                        viewModel.onRetry()
+                    }
+                } finally {
+                    viewModel.setCaptchaResolving(false)
+                }
+            }
+        }
         filterCoordinator.observe().distinctUntilChangedBy { it.listFilter.isEmpty() }
             .drop(1)
             .observe(viewLifecycleOwner) {

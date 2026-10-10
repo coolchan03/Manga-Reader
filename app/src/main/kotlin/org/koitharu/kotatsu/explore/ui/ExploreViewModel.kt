@@ -4,15 +4,19 @@ import androidx.collection.LongSet
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.media.MediaType
+import org.koitharu.kotatsu.core.media.filterByMediaType
 import org.koitharu.kotatsu.core.model.MangaSourceInfo
 import org.koitharu.kotatsu.core.os.AppShortcutManager
 import org.koitharu.kotatsu.core.prefs.AppSettings
@@ -24,6 +28,8 @@ import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.combine
 import org.koitharu.kotatsu.explore.data.MangaSourcesRepository
+import org.koitharu.kotatsu.explore.data.SourcePreset
+import org.koitharu.kotatsu.explore.data.SourcePresetsRepository
 import org.koitharu.kotatsu.explore.domain.ExploreRepository
 import org.koitharu.kotatsu.explore.ui.model.ExploreButtons
 import org.koitharu.kotatsu.explore.ui.model.MangaSourceItem
@@ -35,6 +41,7 @@ import org.koitharu.kotatsu.list.ui.model.LoadingState
 import org.koitharu.kotatsu.list.ui.model.MangaCompactListModel
 import org.koitharu.kotatsu.parsers.model.Manga
 import org.koitharu.kotatsu.parsers.model.MangaSource
+import org.koitharu.kotatsu.sourcescore.domain.SourceRanker
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
 import org.koitharu.kotatsu.suggestions.domain.SuggestionRepository
 import javax.inject.Inject
@@ -45,7 +52,9 @@ class ExploreViewModel @Inject constructor(
 	private val suggestionRepository: SuggestionRepository,
 	private val exploreRepository: ExploreRepository,
 	private val sourcesRepository: MangaSourcesRepository,
+	private val presetsRepository: SourcePresetsRepository,
 	private val shortcutManager: AppShortcutManager,
+	private val sourceRanker: SourceRanker,
 ) : BaseViewModel() {
 
 	val isGrid = settings.observeAsStateFlow(
@@ -65,10 +74,34 @@ class ExploreViewModel @Inject constructor(
 		valueProducer = { isSuggestionsEnabled },
 	)
 
+	private val activePresetFlow: StateFlow<SourcePreset?> = settings.observeAsFlow(
+		key = AppSettings.KEY_ACTIVE_SOURCE_PRESET,
+		valueProducer = { activeSourcePresetId },
+	).flatMapLatest { id ->
+		if (id == 0L) flowOf(null) else presetsRepository.observe(id)
+	}.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, null)
+
 	val onOpenManga = MutableEventFlow<Manga>()
 	val onActionDone = MutableEventFlow<ReversibleAction>()
 	val onShowSuggestionsTip = MutableEventFlow<Unit>()
 	private val isRandomLoading = MutableStateFlow(false)
+
+	val presets: StateFlow<List<SourcePreset>> = presetsRepository.observeAll()
+		.stateIn(viewModelScope + Dispatchers.Default, SharingStarted.Eagerly, emptyList())
+
+	val mediaTypeFilter: MediaType?
+		get() = settings.mediaTypeFilter
+
+	fun setMediaTypeFilter(type: MediaType?) {
+		settings.mediaTypeFilter = type
+	}
+
+	val activePresetId: Long
+		get() = settings.activeSourcePresetId
+
+	fun setActivePreset(presetId: Long) {
+		settings.activeSourcePresetId = presetId
+	}
 
 	val content: StateFlow<List<ListModel>> = isLoading.flatMapLatest { loading ->
 		if (loading) {
@@ -103,9 +136,18 @@ class ExploreViewModel @Inject constructor(
 
 	fun disableSources(sources: Collection<MangaSource>) {
 		launchJob(Dispatchers.Default) {
-			val rollback = sourcesRepository.setSourcesEnabled(sources, isEnabled = false)
-			val message = if (sources.size == 1) R.string.source_disabled else R.string.sources_disabled
-			onActionDone.call(ReversibleAction(message, rollback))
+			val preset = activePresetFlow.value
+			if (preset != null) {
+				val namesToRemove = sources.mapTo(HashSet(sources.size)) { it.name }
+				val updated = preset.sources - namesToRemove
+				presetsRepository.updatePresetSources(preset.id, updated)
+				val message = if (sources.size == 1) R.string.source_disabled else R.string.sources_disabled
+				onActionDone.call(ReversibleAction(message, null))
+			} else {
+				val rollback = sourcesRepository.setSourcesEnabled(sources, isEnabled = false)
+				val message = if (sources.size == 1) R.string.source_disabled else R.string.sources_disabled
+				onActionDone.call(ReversibleAction(message, rollback))
+			}
 		}
 	}
 
@@ -138,27 +180,50 @@ class ExploreViewModel @Inject constructor(
 		}
 	}
 
+	private fun observeSourcesForDisplay(): Flow<List<MangaSourceInfo>> = combine(
+		observeSourcesBeforeMediaFilter(),
+		settings.observeAsFlow(AppSettings.KEY_MEDIA_TYPE_FILTER) { mediaTypeFilter },
+	) { sources, mediaType -> sources.filterByMediaType(mediaType) }
+
+	private fun observeSourcesBeforeMediaFilter(): Flow<List<MangaSourceInfo>> =
+		activePresetFlow.flatMapLatest { preset: SourcePreset? ->
+			if (preset != null) {
+				// Same ordering rules as the enabled list, and re-sorted when scores download.
+				combine(
+					sourcesRepository.observeSourcesSortOrder(),
+					sourcesRepository.observeScoreUpdates(),
+				) { order, _ ->
+					sourcesRepository.sortForDisplay(getPresetSources(preset), order)
+				}
+			} else {
+				sourcesRepository.observeEnabledSources()
+			}
+		}
+
+	private suspend fun getPresetSources(preset: SourcePreset): List<MangaSourceInfo> =
+		sourcesRepository.getPresetSourceInfo(preset.sources)
+
 	private fun createContentFlow() = combine(
-		sourcesRepository.observeEnabledSources(),
+		observeSourcesForDisplay(),
 		getSuggestionFlow(),
 		isGrid,
 		isRandomLoading,
 		isAllSourcesEnabled,
-		sourcesRepository.observeHasNewSourcesForBadge(),
-	) { content, suggestions, grid, randomLoading, allSourcesEnabled, newSources ->
-		buildList(content, suggestions, grid, randomLoading, allSourcesEnabled, newSources)
+		activePresetFlow,
+	) { sources, suggestions, grid, randomLoading, allSourcesEnabled, activePreset ->
+		buildList(sources, suggestions, grid, randomLoading, allSourcesEnabled, activePreset)
 	}.withErrorHandling()
 
-	private fun buildList(
+	private suspend fun buildList(
 		sources: List<MangaSourceInfo>,
 		recommendation: List<Manga>,
 		isGrid: Boolean,
 		randomLoading: Boolean,
 		allSourcesEnabled: Boolean,
-		hasNewSources: Boolean,
+		activePreset: SourcePreset?,
 	): List<ListModel> {
 		val result = ArrayList<ListModel>(sources.size + 3)
-		result += ExploreButtons(randomLoading)
+		result += ExploreButtons(randomLoading, activePreset?.title)
 		if (recommendation.isNotEmpty()) {
 			result += ListHeader(R.string.suggestions, R.string.more, R.id.nav_suggestions)
 			result += RecommendationsItem(recommendation.toRecommendationList())
@@ -167,9 +232,13 @@ class ExploreViewModel @Inject constructor(
 			result += ListHeader(
 				textRes = R.string.remote_sources,
 				buttonTextRes = if (allSourcesEnabled) R.string.manage else R.string.catalog,
-				badge = if (!allSourcesEnabled && hasNewSources) "" else null,
 			)
-			sources.mapTo(result) { MangaSourceItem(it, isGrid) }
+			// Markers come from the community score, ranked within this user's language. A failure
+			// here just means no markers - it must never cost the source list itself.
+			val trending = runCatchingCancellable {
+				sourceRanker.trendingSources(sources.map { it.mangaSource })
+			}.getOrDefault(emptySet())
+			sources.mapTo(result) { MangaSourceItem(it, isGrid, it.name in trending) }
 		} else {
 			result += EmptyHint(
 				icon = R.drawable.ic_empty_common,
@@ -183,7 +252,7 @@ class ExploreViewModel @Inject constructor(
 
 	private fun getLoadingStateList() = listOf(
 		ExploreButtons(isRandomLoading.value),
-		LoadingState,
+		LoadingState(),
 	)
 
 	private fun getSuggestionFlow() = isSuggestionsEnabled.mapLatest { isEnabled ->

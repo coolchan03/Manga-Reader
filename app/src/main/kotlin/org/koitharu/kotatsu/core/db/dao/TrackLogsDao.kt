@@ -30,11 +30,20 @@ abstract class TrackLogsDao : MangaQueryBuilder.ConditionCallback {
 	@Query("SELECT COUNT(*) FROM track_logs WHERE unread = 1")
 	abstract fun observeUnreadCount(): Flow<Int>
 
+	@Query("SELECT MAX(created_at) FROM track_logs WHERE manga_id = :mangaId")
+	abstract suspend fun getLastLogTime(mangaId: Long): Long?
+
 	@Query("DELETE FROM track_logs")
 	abstract suspend fun clear()
 
 	@Query("UPDATE track_logs SET unread = 0 WHERE id = :id")
 	abstract suspend fun markAsRead(id: Long)
+
+	@Query("SELECT * FROM track_logs WHERE id = :id")
+	abstract suspend fun find(id: Long): TrackLogEntity?
+
+	@Query("DELETE FROM track_logs WHERE id = :id")
+	abstract suspend fun delete(id: Long)
 
 	@Insert(onConflict = OnConflictStrategy.REPLACE)
 	abstract suspend fun insert(entity: TrackLogEntity): Long

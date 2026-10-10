@@ -12,6 +12,9 @@ import androidx.core.text.inSpans
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.core.parser.external.ExternalMangaSource
 import org.koitharu.kotatsu.core.util.ext.getDisplayName
+import org.koitharu.kotatsu.jsext.JsItemType
+import org.koitharu.kotatsu.jsext.repo.JsSourceRegistry
+import org.koitharu.kotatsu.jsext.source.JsMangaSource
 import org.koitharu.kotatsu.core.util.ext.toLocale
 import org.koitharu.kotatsu.core.util.ext.toLocaleOrNull
 import org.koitharu.kotatsu.parsers.model.ContentType
@@ -42,6 +45,7 @@ fun MangaSource(name: String?): MangaSource {
 		val parts = name.substringAfter(':').splitTwoParts('/') ?: return UnknownMangaSource
 		return ExternalMangaSource(packageName = parts.first, authority = parts.second)
 	}
+	JsMangaSource.fromName(name)?.let { return it }
 	MangaParserSource.entries.forEach {
 		if (it.name == name) return it
 	}
@@ -53,6 +57,7 @@ fun Collection<String>.toMangaSources() = map(::MangaSource)
 fun MangaSource.isNsfw(): Boolean = when (this) {
 	is MangaSourceInfo -> mangaSource.isNsfw()
 	is MangaParserSource -> contentType == ContentType.HENTAI
+	is JsMangaSource -> JsSourceRegistry.get(id)?.isNsfw == true
 	else -> false
 }
 
@@ -79,7 +84,13 @@ tailrec fun MangaSource.unwrap(): MangaSource = if (this is MangaSourceInfo) {
 	this
 }
 
-fun MangaSource.getLocale(): Locale? = (unwrap() as? MangaParserSource)?.locale?.toLocaleOrNull()
+fun MangaSource.getLocale(): Locale? = when (val source = unwrap()) {
+	is MangaParserSource -> source.locale.toLocaleOrNull()
+	is JsMangaSource -> JsSourceRegistry.get(source.id)?.lang
+		?.takeUnless { it.isBlank() || it == "all" }
+		?.toLocaleOrNull()
+	else -> null
+}
 
 fun MangaSource.getSummary(context: Context): String? = when (val source = unwrap()) {
 	is MangaParserSource -> {
@@ -90,6 +101,19 @@ fun MangaSource.getSummary(context: Context): String? = when (val source = unwra
 
 	is ExternalMangaSource -> context.getString(R.string.external_source)
 
+	is JsMangaSource -> JsSourceRegistry.get(source.id)?.let { e ->
+		listOf(
+			context.getString(
+				when (e.itemType) {
+					JsItemType.MANGA -> R.string.media_type_manga
+					JsItemType.NOVEL -> R.string.media_type_book
+					JsItemType.ANIME -> R.string.media_type_video
+				},
+			),
+			e.lang,
+		).filter { it.isNotEmpty() }.joinToString(" · ")
+	}
+
 	else -> null
 }
 
@@ -98,6 +122,7 @@ fun MangaSource.getTitle(context: Context): String = when (val source = unwrap()
 	LocalMangaSource -> context.getString(R.string.local_storage)
 	TestMangaSource -> context.getString(R.string.test_parser)
 	is ExternalMangaSource -> source.resolveName(context)
+	is JsMangaSource -> JsSourceRegistry.get(source.id)?.name ?: context.getString(R.string.unknown)
 	else -> context.getString(R.string.unknown)
 }
 

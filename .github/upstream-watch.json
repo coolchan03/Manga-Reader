@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-10-09T02:20:00Z",
+  "upstreams": {
+    "Kotatsu-Redo/Kotatsu-Redo": {
+      "ref": "devel",
+      "sha": "6e0cfdc55dac5f27873f2e3634e1191eeb07132d",
+      "note": "Selective sync only; do not wholesale-merge the divergent app history."
+    },
+    "Kotatsu-Redo/kotatsu-parsers-redo": {
+      "ref": "master",
+      "sha": "b3c000024563920d3eecde5816f2e9d3734fa467",
+      "note": "Manga Reader already pins this exact parser revision."
+    },
+    "kodjodevf/mangayomi": {
+      "ref": "main",
+      "sha": "fc5c4e91ab90646e2c5f0a4f4c0d517441ce24c0",
+      "note": "Ported the relevant repository-trust and request-header redaction ideas; tracker-cache and Flutter-only changes do not map to this Android/Kotlin architecture."
+    },
+    "m2k3a/mangayomi-extensions": {
+      "ref": "main",
+      "sha": "ad469866c97bddea4a002063a19a4bbfe1a17653"
+    },
+    "Swakshan/mangayomi-swak-extensions": {
+      "ref": "main",
+      "sha": "1148914eedf925d2eea6ccc4a24f08a4f9b08445"
+    },
+    "gato404/kegareta-sauces": {
+      "ref": "main",
+      "sha": "f8708d3ceba8c04b862a78bfbcd5f46e0e4b0215"
+    }
+  }
+}

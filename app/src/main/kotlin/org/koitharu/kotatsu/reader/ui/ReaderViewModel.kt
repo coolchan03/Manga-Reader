@@ -23,13 +23,18 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.retryWhen
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.plus
 import org.koitharu.kotatsu.R
+import org.koitharu.kotatsu.core.model.MangaHistory
 import org.koitharu.kotatsu.bookmarks.domain.Bookmark
 import org.koitharu.kotatsu.bookmarks.domain.BookmarksRepository
 import org.koitharu.kotatsu.core.exceptions.EmptyMangaException
+import org.koitharu.kotatsu.core.exceptions.CloudFlareProtectedException
+import org.koitharu.kotatsu.core.exceptions.resolve.CaptchaAutoResolveCoordinator
+import org.koitharu.kotatsu.core.media.isJsContinuousMedia
 import org.koitharu.kotatsu.core.model.getPreferredBranch
 import org.koitharu.kotatsu.core.nav.MangaIntent
 import org.koitharu.kotatsu.core.nav.ReaderIntent
@@ -43,6 +48,7 @@ import org.koitharu.kotatsu.core.prefs.observeAsStateFlow
 import org.koitharu.kotatsu.core.util.ext.MutableEventFlow
 import org.koitharu.kotatsu.core.util.ext.call
 import org.koitharu.kotatsu.core.util.ext.firstNotNull
+import org.koitharu.kotatsu.core.util.ext.findCloudFlareException
 import org.koitharu.kotatsu.core.util.ext.requireValue
 import org.koitharu.kotatsu.details.data.MangaDetails
 import org.koitharu.kotatsu.details.domain.DetailsInteractor
@@ -52,12 +58,14 @@ import org.koitharu.kotatsu.details.ui.pager.EmptyMangaReason
 import org.koitharu.kotatsu.download.ui.worker.DownloadWorker
 import org.koitharu.kotatsu.history.data.HistoryRepository
 import org.koitharu.kotatsu.history.domain.HistoryUpdateUseCase
+import org.koitharu.kotatsu.list.domain.ReadingProgress
 import org.koitharu.kotatsu.list.domain.ReadingProgress.Companion.PROGRESS_NONE
 import org.koitharu.kotatsu.local.data.LocalStorageChanges
 import org.koitharu.kotatsu.local.domain.DeleteLocalMangaUseCase
 import org.koitharu.kotatsu.local.domain.model.LocalManga
 import org.koitharu.kotatsu.parsers.model.ContentRating
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.parsers.model.MangaChapter
 import org.koitharu.kotatsu.parsers.model.MangaPage
 import org.koitharu.kotatsu.parsers.util.ifNullOrEmpty
 import org.koitharu.kotatsu.parsers.util.runCatchingCancellable
@@ -69,17 +77,21 @@ import org.koitharu.kotatsu.reader.ui.config.ReaderSettings
 import org.koitharu.kotatsu.reader.ui.pager.ReaderUiState
 import org.koitharu.kotatsu.scrobbling.discord.ui.DiscordRpc
 import org.koitharu.kotatsu.stats.domain.StatsCollector
+import org.koitharu.kotatsu.tracker.domain.TrackingRepository
 import java.time.Instant
 import javax.inject.Inject
 
 private const val BOUNDS_PAGE_OFFSET = 2
 private const val PREFETCH_LIMIT = 10
+private const val MAX_DETAILS_VERIFICATION_RETRIES = 2L
 
 @HiltViewModel
 class ReaderViewModel @Inject constructor(
+    private val captchaAutoResolveCoordinator: CaptchaAutoResolveCoordinator,
     private val savedStateHandle: SavedStateHandle,
     private val dataRepository: MangaDataRepository,
     private val historyRepository: HistoryRepository,
+    private val trackingRepository: TrackingRepository,
     private val bookmarksRepository: BookmarksRepository,
     settings: AppSettings,
     private val pageLoader: PageLoader,
@@ -252,10 +264,29 @@ class ReaderViewModel @Inject constructor(
             return
         }
         val readerState = state ?: readingState.value ?: return
+        val manga = getMangaOrNull() ?: return
+        val progress = if (!manga.source.isJsContinuousMedia()) {
+            computePercent(readerState.chapterId, readerState.page)
+        } else {
+            computePercent(readerState.chapterId, readerState.page, chapterProgress = 0f)
+        }
+        historyUpdateUseCase.invokeAsync(
+            manga = manga,
+            readerState = readerState,
+            percent = progress,
+        )
+    }
+
+    /** Saves a scroll/playback position plus progress through a text or video chapter. */
+    fun saveContinuousState(position: Int, chapterProgress: Float) {
+        val readerState = readingState.value?.copy(scroll = position.coerceAtLeast(0)) ?: return
+        readingState.value = readerState
+        savedStateHandle[ReaderIntent.EXTRA_STATE] = readerState
+        if (isIncognitoMode.value != false) return
         historyUpdateUseCase.invokeAsync(
             manga = getMangaOrNull() ?: return,
             readerState = readerState,
-            percent = computePercent(readerState.chapterId, readerState.page),
+            percent = computePercent(readerState.chapterId, readerState.page, chapterProgress),
         )
     }
 
@@ -409,7 +440,13 @@ class ReaderViewModel @Inject constructor(
             var exception: Exception? = null
             var loadedDetails: MangaDetails? = null
             try {
+                intent.manga?.source?.let { captchaAutoResolveCoordinator.awaitActiveResolve(it) }
                 detailsLoadUseCase(intent, force = false)
+                    .retryWhen { cause, attempt ->
+                        val cf = cause.findCloudFlareException()
+                        attempt < MAX_DETAILS_VERIFICATION_RETRIES && cf is CloudFlareProtectedException &&
+                            captchaAutoResolveCoordinator.resolveIfEnabled(cf)
+                    }
                     .collect { details ->
                         loadedDetails = details
                         if (mangaDetails.value == null) {
@@ -442,9 +479,15 @@ class ReaderViewModel @Inject constructor(
 
                         // save state
                         if (!isIncognitoMode.firstNotNull()) {
-                            readingState.value?.let {
-                                val percent = computePercent(it.chapterId, it.page)
-                                historyUpdateUseCase(manga, it, percent)
+                            readingState.value?.let { state ->
+                                val percent = if (!manga.source.isJsContinuousMedia()) {
+                                    computePercent(state.chapterId, state.page)
+                                } else {
+                                    val existing = historyRepository.getOne(manga)?.percent
+                                    existing?.takeIf { ReadingProgress.isValid(it) }
+                                        ?: computePercent(state.chapterId, state.page, chapterProgress = 0f)
+                                }
+                                historyUpdateUseCase(manga, state, percent)
                             }
                         }
                         notifyStateChanged()
@@ -511,14 +554,19 @@ class ReaderViewModel @Inject constructor(
         val chapter = chaptersLoader.peekChapter(state.chapterId) ?: return
         val m = mangaDetails.value ?: return
         val chapterIndex = m.chapters[chapter.branch]?.indexOfFirst { it.id == chapter.id } ?: -1
+        val currentManga = m.toManga()
         val newState = ReaderUiState(
-            mangaName = m.toManga().title,
+            mangaName = currentManga.title,
             chapter = chapter,
             chapterIndex = chapterIndex,
             chaptersTotal = m.chapters[chapter.branch].sizeOrZero(),
             totalPages = chaptersLoader.getPagesCount(chapter.id),
             currentPage = state.page,
-            percent = computePercent(state.chapterId, state.page),
+            percent = if (!currentManga.source.isJsContinuousMedia()) {
+                computePercent(state.chapterId, state.page)
+            } else {
+                computePercent(state.chapterId, state.page, chapterProgress = 0f)
+            },
             incognito = isIncognitoMode.value == true,
         )
         uiState.value = newState
@@ -528,16 +576,21 @@ class ReaderViewModel @Inject constructor(
         }
     }
 
-    private fun computePercent(chapterId: Long, pageIndex: Int): Float {
+    private fun computePercent(
+        chapterId: Long,
+        pageIndex: Int,
+        chapterProgress: Float? = null,
+    ): Float {
         val branch = chaptersLoader.peekChapter(chapterId)?.branch
         val chapters = mangaDetails.value?.chapters?.get(branch) ?: return PROGRESS_NONE
         val chaptersCount = chapters.size
         val chapterIndex = chapters.indexOfFirst { x -> x.id == chapterId }
         val pagesCount = chaptersLoader.getPagesCount(chapterId)
-        if (chaptersCount == 0 || pagesCount == 0) {
+        if (chaptersCount == 0 || pagesCount == 0 || chapterIndex < 0) {
             return PROGRESS_NONE
         }
-        val pagePercent = (pageIndex + 1) / pagesCount.toFloat()
+        val pagePercent = chapterProgress?.coerceIn(0f, 1f)
+            ?: (pageIndex + 1) / pagesCount.toFloat()
         val ppc = 1f / chaptersCount
         return ppc * chapterIndex + ppc * pagePercent
     }
@@ -600,18 +653,71 @@ class ReaderViewModel @Inject constructor(
             // specified branch is requested
             return if (ReaderIntent.EXTRA_BRANCH in savedStateHandle) {
                 if (chapter.branch == requestedBranch) {
-                    ReaderState(history)
+                    getTrackedUnreadState(manga, history, chapter) ?: ReaderState(history)
                 } else {
                     ReaderState(manga, requestedBranch)
                 }
             } else {
-                ReaderState(history)
+                getTrackedUnreadState(manga, history, chapter) ?: ReaderState(history)
             }
         }
 
         // start from beginning
         val preferredBranch = requestedBranch ?: manga.getPreferredBranch(null)
         return ReaderState(manga, preferredBranch)
+    }
+
+    private suspend fun getTrackedUnreadState(
+        manga: Manga,
+        history: MangaHistory,
+        historyChapter: MangaChapter,
+    ): ReaderState? {
+        val newChapters = trackingRepository.getNewChaptersCount(manga.id)
+        if (newChapters <= 0) {
+            return null
+        }
+        // Auto-jump only on the first open after the new chapters were detected.
+        // The saved percent counts the page currently on screen as read, so a position
+        // on a chapter's last page — or anywhere inside a single-page long-strip
+        // chapter — is indistinguishable from a finished chapter. Once the user has
+        // read anything after the detection, their exact saved position must win;
+        // otherwise every reopen silently advances one more chapter.
+        val detectedAt = trackingRepository.getLastUpdateTime(manga.id)
+        if (detectedAt <= 0L || history.updatedAt.toEpochMilli() >= detectedAt) {
+            return null
+        }
+        if (history.scroll > 0) {
+            // Mid-page scroll position (webtoon strip) would be discarded by the jump
+            return null
+        }
+        val chapters = manga.getChapters(historyChapter.branch)
+        if (chapters.isEmpty()) {
+            return null
+        }
+        val firstUnreadIndex = (chapters.size - newChapters).coerceIn(0, chapters.lastIndex)
+        val historyIndex = chapters.indexOfFirst { it.id == history.chapterId }
+        if (historyIndex != firstUnreadIndex - 1) {
+            return null
+        }
+        if (history.estimatedReadChaptersCount() < firstUnreadIndex) {
+            return null
+        }
+        return ReaderState(
+            chapterId = chapters[firstUnreadIndex].id,
+            page = 0,
+            scroll = 0,
+        )
+    }
+
+    private fun MangaHistory.estimatedReadChaptersCount(): Int {
+        if (chaptersCount <= 0 || !ReadingProgress.isValid(percent)) {
+            return 0
+        }
+        return if (ReadingProgress.isCompleted(percent)) {
+            chaptersCount
+        } else {
+            (percent * chaptersCount).toInt().coerceIn(0, chaptersCount)
+        }
     }
 
     private fun Exception.mergeWith(other: Exception?): Exception = if (other == null) {

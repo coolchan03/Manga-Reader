@@ -41,12 +41,13 @@ import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.koitharu.kotatsu.R
 import org.koitharu.kotatsu.backups.ui.periodical.PeriodicalBackupService
-import org.koitharu.kotatsu.browser.AdListUpdateService
 import org.koitharu.kotatsu.core.exceptions.resolve.SnackbarErrorObserver
 import org.koitharu.kotatsu.core.nav.router
 import org.koitharu.kotatsu.core.os.VoiceInputContract
@@ -55,6 +56,7 @@ import org.koitharu.kotatsu.core.prefs.NavItem
 import org.koitharu.kotatsu.core.ui.BaseActivity
 import org.koitharu.kotatsu.core.ui.util.FadingAppbarMediator
 import org.koitharu.kotatsu.core.ui.util.MenuInvalidator
+import org.koitharu.kotatsu.core.ui.widgets.FloatingBottomNavigationView
 import org.koitharu.kotatsu.core.ui.widgets.SlidingBottomNavigationView
 import org.koitharu.kotatsu.core.util.ext.consume
 import org.koitharu.kotatsu.core.util.ext.end
@@ -75,10 +77,16 @@ import org.koitharu.kotatsu.remotelist.ui.MangaSearchMenuProvider
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionItemCallback
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionListenerImpl
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionMenuProvider
+import org.koitharu.kotatsu.search.domain.ScreenSearchQuery
+import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionScope
 import org.koitharu.kotatsu.search.ui.suggestion.SearchSuggestionViewModel
 import org.koitharu.kotatsu.search.ui.suggestion.adapter.SearchSuggestionAdapter
 import javax.inject.Inject
 import com.google.android.material.R as materialR
+import org.koitharu.kotatsu.sourcescore.data.CommunitySettings
+import org.koitharu.kotatsu.sourcescore.ui.CommunityOnboardingDialog
+import org.koitharu.kotatsu.sourcescore.domain.CommunityReplyNotifier
+import org.koitharu.kotatsu.sourcescore.ui.SourceScoreSyncWorker
 
 @AndroidEntryPoint
 class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNavOwner,
@@ -89,10 +97,25 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 	SearchView.TransitionListener {
 
 	@Inject
+	lateinit var communitySettings: CommunitySettings
+
+	@Inject
+	lateinit var sourceScoreSyncScheduler: SourceScoreSyncWorker.Scheduler
+
+	@Inject
+	lateinit var communityReplyNotifier: CommunityReplyNotifier
+
+	@Inject
 	lateinit var settings: AppSettings
 
 	private val viewModel by viewModels<MainViewModel>()
 	private val searchSuggestionViewModel by viewModels<SearchSuggestionViewModel>()
+
+	@Inject
+	lateinit var screenSearchQuery: ScreenSearchQuery
+
+	/** Mirrors the filter of the screen currently shown, so the menu can be prepared synchronously. */
+	private var activeScreenFilter: String = ""
 	private val voiceInputLauncher = registerForActivityResult(VoiceInputContract()) { result ->
 		if (result != null) {
 			viewBinding.searchView.setText(result)
@@ -114,6 +137,9 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 
 		viewBinding.fab?.setOnClickListener(this)
 		viewBinding.navRail?.headerView?.findViewById<View>(R.id.railFab)?.setOnClickListener(this)
+		(viewBinding.bottomNav as? FloatingBottomNavigationView)?.setOnContinueClickListener {
+			viewModel.openLastReader()
+		}
 		fadingAppbarMediator =
 			FadingAppbarMediator(viewBinding.appbar, viewBinding.layoutSearch ?: viewBinding.searchBar)
 
@@ -129,6 +155,16 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		}
 
 		addMenuProvider(MainMenuProvider(router, viewModel))
+
+		// The community features introduce themselves once, on the first launch that reaches the main
+		// screen. Nothing is created before the user answers: the identity is generated lazily, so
+		// declining means no request is ever made and no row exists anywhere.
+		CommunityOnboardingDialog.showIfNeeded(this, communitySettings, supportFragmentManager)
+		// Idempotent, and reads the toggles - so it also cancels the job when the feature is off.
+		sourceScoreSyncScheduler.schedule()
+		// Polled on open rather than pushed: push would mean a device token and a third party
+		// learning when this user opens a manga app, to save a request that costs nothing.
+		communityReplyNotifier.pollOnOpen(lifecycleScope)
 
 		val exitCallback = ExitCallback(this, viewBinding.container)
 		onBackPressedDispatcher.addCallback(exitCallback)
@@ -152,6 +188,10 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		viewModel.appUpdate.observe(this, MenuInvalidator(this))
 		viewModel.onFirstStart.observeEvent(this) { router.showWelcomeSheet() }
 		viewModel.isBottomNavPinned.observe(this, ::setNavbarPinned)
+		settings.observe(AppSettings.KEY_FLOATING_NAV).onEach {
+			viewBinding.root.requestApplyInsets()
+			setNavbarPinned(settings.isNavBarPinned)
+		}.launchIn(lifecycleScope)
 		searchSuggestionViewModel.isIncognitoModeEnabled.observe(this, this::onIncognitoModeChanged)
 		viewBinding.bottomNav?.addOnLayoutChangeListener(this)
 		viewBinding.searchView.addTransitionListener(this)
@@ -168,6 +208,15 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 	override fun onFragmentChanged(fragment: Fragment, fromUser: Boolean) {
 		adjustFabVisibility(topFragment = fragment)
 		adjustAppbar(topFragment = fragment)
+		// The search bar is shared by every section, so tell it which one it now belongs to: on History
+		// and Favourites it narrows to that screen instead of suggesting across the whole library.
+		searchSuggestionViewModel.setScope(
+			when (fragment) {
+				is HistoryListFragment -> SearchSuggestionScope.HISTORY
+				is FavouritesContainerFragment -> SearchSuggestionScope.FAVOURITES
+				else -> SearchSuggestionScope.ALL
+			},
+		)
 		if (fromUser) {
 			actionModeDelegate.finishActionMode()
 			viewBinding.appbar.setExpanded(true)
@@ -198,11 +247,28 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 				searchBarDefaultMargin + barsInsets.start(v)
 			}
 		}
-		viewBinding.bottomNav?.updatePadding(
-			left = barsInsets.left,
-			right = barsInsets.right,
-			bottom = barsInsets.bottom,
-		)
+		viewBinding.bottomNav?.let { nav ->
+			val isFloating = settings.isFloatingNavBar
+			if (isFloating) {
+				// The Compose face draws and centres its own pill, including its horizontal padding
+				// and shadow, so this view only has to span the width and clear the system bars.
+				nav.updatePadding(left = barsInsets.left, right = barsInsets.right, bottom = 0)
+				nav.updateLayoutParams<MarginLayoutParams> {
+					marginStart = 0
+					marginEnd = 0
+					bottomMargin = barsInsets.bottom + resources.getDimensionPixelOffset(R.dimen.margin_small)
+				}
+				nav.elevation = 0f
+			} else {
+				nav.updatePadding(left = barsInsets.left, right = barsInsets.right, bottom = barsInsets.bottom)
+				nav.updateLayoutParams<MarginLayoutParams> {
+					marginStart = 0
+					marginEnd = 0
+					bottomMargin = 0
+				}
+				nav.elevation = 0f
+			}
+		}
 		viewBinding.navRail?.updateLayoutParams<MarginLayoutParams> {
 			marginStart = barsInsets.start(v)
 			topMargin = barsInsets.top
@@ -301,9 +367,6 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 				requestNotificationsPermission()
 				startService(Intent(this@MainActivity, LocalIndexUpdateService::class.java))
 				startService(Intent(this@MainActivity, PeriodicalBackupService::class.java))
-				if (settings.isAdBlockEnabled) {
-					startService(Intent(this@MainActivity, AdListUpdateService::class.java))
-				}
 			}
 		}
 	} catch (e: IllegalStateException) {
@@ -326,8 +389,17 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 		isSearchOpened: Boolean = viewBinding.searchView.isShowing,
 	) {
 		navigationDelegate.navRailHeader?.railFab?.isVisible = isResumeEnabled
+		val shouldShowResume = isResumeEnabled &&
+			!actionModeDelegate.isActionModeStarted &&
+			!isSearchOpened &&
+			topFragment is HistoryListFragment
+		// The floating bar carries its own round continue button beside the pill, so the layout's
+		// extended FAB stays hidden while that face is in use.
+		val floatingNav = viewBinding.bottomNav as? FloatingBottomNavigationView
+		val isComposeNav = floatingNav != null && settings.isFloatingNavBar
+		floatingNav?.setContinueVisible(shouldShowResume && isComposeNav)
 		val fab = viewBinding.fab ?: return
-		if (isResumeEnabled && !actionModeDelegate.isActionModeStarted && !isSearchOpened && topFragment is HistoryListFragment) {
+		if (shouldShowResume && !isComposeNav) {
 			if (!fab.isVisible) {
 				fab.show()
 			}
@@ -374,6 +446,23 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 
 	private fun initSearch() {
 		val listener = SearchSuggestionListenerImpl(router, viewBinding.searchView, searchSuggestionViewModel)
+		// Keep the collapsed bar showing the active filter, and offer a way out of it. The SearchView and
+		// SearchBar hold their own text, so hiding the overlay does not carry the query across by itself.
+		addMenuProvider(
+			ScreenFilterMenuProvider(
+				isFilterActive = { activeScreenFilter.isNotEmpty() },
+				onClear = {
+					viewBinding.searchView.setText("")
+					// Dropping the mode clears that screen's filter, so this is the only call needed.
+					searchSuggestionViewModel.setScoped(false)
+				},
+			),
+		)
+		screenSearchQuery.activeQuery.observe(this) { query ->
+			activeScreenFilter = query
+			viewBinding.searchBar.setText(query)
+			invalidateOptionsMenu()
+		}
 		val adapter = SearchSuggestionAdapter(listener)
 		viewBinding.searchView.toolbar.addMenuProvider(
 			SearchSuggestionMenuProvider(this, voiceInputLauncher, searchSuggestionViewModel),
@@ -402,7 +491,7 @@ class MainActivity : BaseActivity<ActivityMainBinding>(), AppBarOwner, BottomNav
 
 	private fun setNavbarPinned(isPinned: Boolean) {
 		val bottomNavBar = viewBinding.bottomNav
-		bottomNavBar?.isPinned = isPinned
+		bottomNavBar?.isPinned = isPinned || settings.isFloatingNavBar
 		for (view in viewBinding.appbar.children) {
 			val lp = view.layoutParams as? AppBarLayout.LayoutParams ?: continue
 			val scrollFlags = if (isPinned) {

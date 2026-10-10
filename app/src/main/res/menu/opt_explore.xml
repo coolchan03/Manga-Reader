@@ -3,6 +3,41 @@
 	xmlns:android="http://schemas.android.com/apk/res/android">
 
 	<item
+		android:id="@+id/action_presets"
+		android:title="@string/source_presets" />
+
+	<item
+		android:id="@+id/action_media_type"
+		android:title="@string/content_type">
+
+		<menu>
+
+			<group
+				android:id="@+id/group_media_type"
+				android:checkableBehavior="single">
+
+				<item
+					android:id="@+id/action_media_all"
+					android:title="@string/media_type_all" />
+
+				<item
+					android:id="@+id/action_media_manga"
+					android:title="@string/media_type_manga" />
+
+				<item
+					android:id="@+id/action_media_book"
+					android:title="@string/media_type_book" />
+
+				<item
+					android:id="@+id/action_media_video"
+					android:title="@string/media_type_video" />
+
+			</group>
+		</menu>
+
+	</item>
+
+	<item
 		android:id="@+id/action_manage"
 		android:title="@string/manage_sources"
 		android:titleCondensed="@string/manage" />

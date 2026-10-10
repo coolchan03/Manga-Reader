@@ -4,8 +4,10 @@ import android.content.Context
 import android.content.Intent
 import org.koitharu.kotatsu.BuildConfig
 import org.koitharu.kotatsu.bookmarks.domain.Bookmark
+import org.koitharu.kotatsu.core.media.isJsContinuousMedia
 import org.koitharu.kotatsu.core.model.parcelable.ParcelableManga
 import org.koitharu.kotatsu.parsers.model.Manga
+import org.koitharu.kotatsu.reader.ui.MediaReaderActivity
 import org.koitharu.kotatsu.reader.ui.ReaderActivity
 import org.koitharu.kotatsu.reader.ui.ReaderState
 
@@ -14,14 +16,22 @@ value class ReaderIntent private constructor(
 	val intent: Intent,
 ) {
 
-	class Builder(context: Context) {
+	class Builder(private val context: Context) {
 
 		private val intent = Intent(context, ReaderActivity::class.java)
 			.setAction(ACTION_MANGA_READ)
 
 		fun manga(manga: Manga) = apply {
+			targetFor(manga)
 			intent.putExtra(AppRouter.KEY_MANGA, ParcelableManga(manga))
 			intent.setData(AppRouter.shortMangaUrl(manga.id))
+		}
+
+		fun targetFor(manga: Manga) = apply {
+			intent.setClass(
+				context,
+				if (manga.source.isJsContinuousMedia()) MediaReaderActivity::class.java else ReaderActivity::class.java,
+			)
 		}
 
 		fun mangaId(mangaId: Long) = apply {

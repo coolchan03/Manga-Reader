@@ -8,21 +8,50 @@ plugins {
 	id 'dagger.hilt.android.plugin'
 	id 'androidx.room'
 	id 'org.jetbrains.kotlin.plugin.serialization'
+	id 'org.jetbrains.kotlin.plugin.compose'
+	id 'io.sentry.android.gradle'
 	// enable if needed
 	// id 'dev.reformator.stacktracedecoroutinator'
 }
 
+// Reads a credential from local.properties, falling back to an environment variable for CI.
+//
+// Properties.load only splits on the first '=', so a base64 token's '=' padding survives untouched
+// and needs no quoting. Quotes would in fact become part of the value, so they are stripped here -
+// along with stray whitespace - to make that paste mistake harmless instead of silently wrong.
+def readSecret = { String fileKey, String envKey ->
+	def props = new Properties()
+	def file = rootProject.file('local.properties')
+	if (file.exists()) {
+		file.withInputStream { props.load(it) }
+	}
+	def value = (props.getProperty(fileKey) ?: System.getenv(envKey) ?: '').trim()
+	while (value.length() > 1 && (value.startsWith("'") || value.startsWith('"'))
+		&& value.charAt(0) == value.charAt(value.length() - 1)) {
+		value = value.substring(1, value.length() - 1).trim()
+	}
+	return value
+}
+
+
 android {
-	compileSdk = 36
+	compileSdk = 37
 	buildToolsVersion = '35.0.0'
 	namespace = 'org.koitharu.kotatsu'
 
-	defaultConfig {
-		applicationId 'org.koitharu.kotatsu'
+    dependenciesInfo {
+        // Disables dependency metadata when building APKs.
+        includeInApk = false
+        // Disables dependency metadata when building Android App Bundles.
+        includeInBundle = false
+    }
+
+    defaultConfig {
+		applicationId 'io.github.kotatsuredo.kotatsu'
 		minSdk = 23
-		targetSdk = 36
-		versionCode = 1033
-		versionName = '9.4.1'
+		targetSdk = 37
+		versionCode = 2044
+        versionName = '9.8.5'
 		generatedDensities = []
 		testInstrumentationRunner 'org.koitharu.kotatsu.HiltTestRunner'
 		ksp {
@@ -38,6 +67,18 @@ android {
 			localProperties.load(new FileInputStream(localPropertiesFile))
 		}
 		resValue 'string', 'tg_backup_bot_token', localProperties.getProperty('tg_backup_bot_token', '')
+		// Crash reporting endpoint. Empty unless a `sentry_dsn` is set in local.properties (or the
+		// SENTRY_DSN environment variable, for CI); an empty DSN disables reporting entirely, so a
+		// plain clone still builds and simply never asks the user to send anything.
+		def sentryDsn = readSecret('sentry_dsn', 'SENTRY_DSN')
+		buildConfigField 'String', 'SENTRY_DSN', "\"${sentryDsn}\""
+
+		// Host that serves the shareable https manga links and the assetlinks.json that lets Android
+		// verify them. Must match the deployed worker's hostname in web/wrangler.toml exactly, or the
+		// links stop opening the app directly. Used by the manifest and by Manga.appUrl.
+		def appLinkHost = 'kotatsuredo.app'
+		manifestPlaceholders = [appLinkHost: appLinkHost]
+		buildConfigField 'String', 'APP_LINK_HOST', "\"${appLinkHost}\""
 	}
 	buildTypes {
 		debug {
@@ -56,6 +97,7 @@ android {
 	buildFeatures {
 		viewBinding true
 		buildConfig true
+		compose true
 	}
 	packagingOptions {
 		resources {
@@ -71,11 +113,11 @@ android {
 	}
 	compileOptions {
 		coreLibraryDesugaringEnabled true
-		sourceCompatibility JavaVersion.VERSION_11
-		targetCompatibility JavaVersion.VERSION_11
+		sourceCompatibility JavaVersion.VERSION_17
+		targetCompatibility JavaVersion.VERSION_17
 	}
 	kotlinOptions {
-		jvmTarget = JavaVersion.VERSION_11.toString()
+		jvmTarget = JavaVersion.VERSION_17.toString()
 		freeCompilerArgs += [
 			'-opt-in=kotlin.ExperimentalStdlibApi',
 			'-opt-in=kotlinx.coroutines.ExperimentalCoroutinesApi',
@@ -92,7 +134,7 @@ android {
 		]
 	}
 	room {
-		schemaDirectory "$projectDir/schemas"
+        schemaDirectory "$projectDir/schemas"
 	}
 	lint {
 		abortOnError true
@@ -115,6 +157,47 @@ android {
 		}
 	}
 }
+
+// Uploads the R8 mapping file so release and nightly crash reports arrive deobfuscated. Without it
+// every production stack trace in Sentry is unreadable, since both build types are minified.
+//
+// Needs sentry_org / sentry_project in local.properties (or SENTRY_ORG / SENTRY_PROJECT env vars) and
+// a SENTRY_AUTH_TOKEN. With no token the build still works - the mapping is bundled and tagged with a
+// uuid, just not uploaded, so it can be uploaded later with sentry-cli.
+sentry {
+	def sentryOrg = readSecret('sentry_org', 'SENTRY_ORG')
+	def sentryProject = readSecret('sentry_project', 'SENTRY_PROJECT')
+	def sentryToken = readSecret('sentry_auth_token', 'SENTRY_AUTH_TOKEN')
+
+	org = sentryOrg
+	projectName = sentryProject
+	authToken = sentryToken
+
+	// This org lives in Sentry's EU region. sentry-cli defaults to sentry.io (US), where the org does
+	// not exist, so the mapping upload fails there rather than anywhere useful. The DSN says the same
+	// thing - it points at ingest.de.sentry.io. Override via local.properties / SENTRY_URL if the org
+	// is ever migrated to another region.
+	def sentryUrl = readSecret('sentry_url', 'SENTRY_URL')
+	url = sentryUrl ?: 'https://de.sentry.io'
+
+	includeProguardMapping = true
+	autoUploadProguardMapping = sentryToken && sentryOrg && sentryProject
+	// Debug builds are not minified, so there is nothing to map.
+	ignoredBuildTypes = ['debug']
+
+	// The SDK dependency is pinned by hand in the version catalog; let the plugin leave it alone.
+	autoInstallation {
+		enabled = false
+	}
+	// Performance tracing is not used, and its bytecode instrumentation would add overhead for data
+	// nothing consumes.
+	tracingInstrumentation {
+		enabled = false
+	}
+	uploadNativeSymbols = false
+	includeSourceContext = false
+}
+
 dependencies {
 	def parsersVersion = libs.versions.parsers.get()
 	if (System.properties.containsKey('parsersVersionOverride')) {
@@ -123,7 +206,7 @@ dependencies {
 		parsersVersion = System.getProperty('parsersVersionOverride')
 	}
 	//noinspection UseTomlInstead
-	implementation("com.github.KotatsuApp:kotatsu-parsers:$parsersVersion") {
+	implementation("com.github.clquwu:kotatsu-parsers-redo:$parsersVersion") {
 		exclude group: 'org.json', module: 'json'
 	}
 
@@ -131,6 +214,13 @@ dependencies {
 	implementation libs.kotlin.stdlib
 	implementation libs.kotlinx.coroutines.android
 	implementation libs.kotlinx.coroutines.guava
+
+	implementation platform(libs.androidx.compose.bom)
+	implementation libs.androidx.compose.runtime
+	implementation libs.androidx.compose.ui
+	implementation libs.androidx.compose.foundation
+	implementation libs.androidx.compose.material3
+	implementation libs.androidx.compose.activity
 
 	implementation libs.androidx.appcompat
 	implementation libs.androidx.core
@@ -167,6 +257,7 @@ dependencies {
 	implementation libs.okhttp.dnsoverhttps
 	implementation libs.okio
 	implementation libs.kotlinx.serialization.json
+	implementation libs.quickjs.kt
 
 	implementation libs.adapterdelegates
 	implementation libs.adapterdelegates.viewbinding
@@ -184,10 +275,13 @@ dependencies {
 	implementation libs.ssiv
 	implementation libs.disk.lru.cache
 	implementation libs.markwon
+	implementation libs.media3.exoplayer
+	implementation libs.media3.exoplayer.hls
+	implementation libs.media3.ui
 	implementation libs.kizzyrpc
 
-	implementation libs.acra.http
 	implementation libs.acra.dialog
+	implementation libs.sentry.android
 
 	implementation libs.conscrypt.android
 

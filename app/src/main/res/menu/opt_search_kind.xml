@@ -46,6 +46,10 @@
 					android:checkable="true"
 					android:title="@string/hide_empty_sources" />
 
+				<item
+					android:id="@+id/action_filter_years"
+					android:title="@string/publication_years" />
+
 			</group>
 		</menu>
 

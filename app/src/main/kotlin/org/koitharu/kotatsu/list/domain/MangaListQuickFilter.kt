@@ -65,6 +65,9 @@ abstract class MangaListQuickFilter(
 
 	private fun ArraySet<ListFilterOption>.addNoConflicts(option: ListFilterOption) {
 		add(option)
+		if (option is ListFilterOption.MediaType) {
+			removeIf { it is ListFilterOption.MediaType && it != option }
+		}
 		if (option is ListFilterOption.Inverted) {
 			remove(option.option)
 		} else {

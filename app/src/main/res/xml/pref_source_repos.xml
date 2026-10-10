@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.preference.PreferenceScreen
+	xmlns:android="http://schemas.android.com/apk/res/android"
+	android:title="@string/source_repos">
+
+	<androidx.preference.PreferenceCategory
+		android:key="source_repos_list"
+		android:title="@string/source_repos_list" />
+
+	<androidx.preference.Preference
+		android:icon="@drawable/ic_add"
+		android:key="source_repo_add"
+		android:persistent="false"
+		android:title="@string/add_repository" />
+
+	<androidx.preference.PreferenceCategory
+		android:key="source_plugins_list"
+		android:title="@string/source_plugins" />
+
+</androidx.preference.PreferenceScreen>

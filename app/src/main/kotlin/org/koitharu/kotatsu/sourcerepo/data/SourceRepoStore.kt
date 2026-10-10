@@ -42,6 +42,15 @@ class SourceRepoStore @Inject constructor(
 			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/index.json",
 			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/novel_index.json",
 			"https://raw.githubusercontent.com/coolchan03/Best-BL-Mangayomi-Extensions/main/anime_index.json",
+			"https://raw.githubusercontent.com/kodjodevf/mangayomi-extensions/refs/heads/main/index.json",
+			"https://raw.githubusercontent.com/kodjodevf/mangayomi-extensions/refs/heads/main/novel_index.json",
+			"https://raw.githubusercontent.com/Swakshan/mangayomi-swak-extensions/refs/heads/main/index.json",
+			"https://raw.githubusercontent.com/Swakshan/mangayomi-swak-extensions/refs/heads/main/anime_index.json",
+			"https://raw.githubusercontent.com/Swakshan/mangayomi-swak-extensions/refs/heads/main/novel_index.json",
+			"https://raw.githubusercontent.com/Schnitzel5/sugoi-modules/refs/heads/main/index.json",
+			"https://raw.githubusercontent.com/Schnitzel5/sugoi-modules/refs/heads/main/anime_index.json",
+			"https://raw.githubusercontent.com/Schnitzel5/sugoi-modules/refs/heads/main/novel_index.json",
+			"https://raw.githubusercontent.com/gato404/kegareta-sauces/refs/heads/main/anime_index.json",
 		)
 	}
 }
